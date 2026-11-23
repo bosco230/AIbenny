@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
+import os
 import platform
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, TypeVar
 
 __all__ = [
     "WhisperRuntime",
     "cuda_runtime_probe",
     "load_whisper_runtime",
+    "register_nvidia_wheel_dlls",
     "run_with_auto_cpu_fallback",
 ]
 
@@ -46,13 +50,14 @@ def cuda_runtime_probe(
     current_system = system or platform.system()
     if current_system != "Windows":
         return True, None
+    if dll_loader is None:
+        register_nvidia_wheel_dlls()
     loader = dll_loader or ctypes.WinDLL  # type: ignore[attr-defined]
     missing: list[str] = []
-    for library in ("cublas64_12.dll", "cudnn64_8.dll"):
-        try:
-            loader(library)
-        except (OSError, AttributeError):
-            missing.append(library)
+    # CTranslate2 >= 4.5 links cuDNN 9; older wheels link cuDNN 8.
+    for alternatives in (("cublas64_12.dll",), ("cudnn64_9.dll", "cudnn64_8.dll")):
+        if not any(_can_load(loader, library) for library in alternatives):
+            missing.append(alternatives[0])
     if not missing:
         return True, None
     return (
@@ -61,6 +66,45 @@ def cuda_runtime_probe(
         + ", ".join(missing)
         + "); selected the compatible CPU/INT8 runtime",
     )
+
+
+def _can_load(loader: Callable[[str], object], library: str) -> bool:
+    try:
+        loader(library)
+    except (OSError, AttributeError):
+        return False
+    return True
+
+
+_registered_dll_dirs: list[Any] = []
+
+
+def register_nvidia_wheel_dlls() -> list[str]:
+    """Expose CUDA DLLs from ``nvidia-*-cu12`` pip wheels on Windows.
+
+    ``pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`` places the DLLs under
+    ``site-packages/nvidia/<lib>/bin``, which Windows does not search by
+    default. Prepending them to PATH (used by CTranslate2's own loader) and
+    registering them as DLL directories makes a toolkit-free GPU install work.
+    """
+
+    if platform.system() != "Windows":
+        return []
+    try:
+        import nvidia  # type: ignore[import-not-found]
+    except ImportError:
+        return []
+    added: list[str] = []
+    for root in getattr(nvidia, "__path__", []):
+        for bin_dir in sorted(Path(root).glob("*/bin")):
+            text = str(bin_dir)
+            if text in os.environ.get("PATH", ""):
+                continue
+            os.environ["PATH"] = text + os.pathsep + os.environ.get("PATH", "")
+            with contextlib.suppress(OSError, AttributeError):
+                _registered_dll_dirs.append(os.add_dll_directory(text))  # type: ignore[attr-defined]
+            added.append(text)
+    return added
 
 
 def load_whisper_runtime(
@@ -80,6 +124,7 @@ def load_whisper_runtime(
     """
 
     if model_class is None:
+        register_nvidia_wheel_dlls()
         from faster_whisper import WhisperModel  # type: ignore[import-not-found]
 
         model_class = WhisperModel

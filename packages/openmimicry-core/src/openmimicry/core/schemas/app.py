@@ -217,6 +217,10 @@ class STTConfigSection(BaseModel):
     # Require this much silence before finalising a phrase. RealtimeSTT's
     # upstream 0.2 s default is too eager for ordinary conversational pauses.
     post_speech_silence_duration: float = Field(default=1.0, ge=0.2, le=3.0)
+    # Vocabulary hint passed to Whisper ahead of wake names. For Cantonese,
+    # a list of colloquial characters keeps output in Traditional Cantonese
+    # instead of drifting into Simplified written Mandarin.
+    prompt: str = Field(default="", max_length=400)
     wake: STTWakeConfig = Field(default_factory=STTWakeConfig)
 
 

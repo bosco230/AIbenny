@@ -20,7 +20,15 @@ llm:
 
 voice:
   stt:
-    adapter: mock
+    # Hold Ctrl+Space to talk. Faster-Whisper runs in an isolated worker;
+    # "yue" asks Whisper large-v3 for Hong Kong Cantonese transcription.
+    adapter: isolated-faster-whisper
+    model: large-v3-turbo
+    language: yue
+    device: auto
+    compute_type: auto
+    beam_size: 5
+    prompt: "喺度、唔係、咗、嘅、啲、佢哋、聽日、傾偈、攰"
     post_speech_silence_duration: 1.0
     wake:
       enabled: false

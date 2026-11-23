@@ -614,6 +614,10 @@ class SpeechController:
 
     # --------------------------------------------- continuous / wake listening
 
+    def _stt_prompt_terms(self, wake_phrases: list[str]) -> list[str]:
+        prompt = (getattr(self._cfg.stt, "prompt", "") or "").strip()
+        return [prompt, *wake_phrases] if prompt else list(wake_phrases)
+
     def _dictation_config(self, *, mode: str = "dictation") -> STTConfig:
         return STTConfig(
             language=self._cfg.stt.language,
@@ -622,7 +626,7 @@ class SpeechController:
             use_main_model_for_realtime=self._cfg.stt.use_main_model_for_realtime,
             mode=cast(Any, mode),
             wake_names=[],
-            prompt_terms=self._wake_match_phrases(),
+            prompt_terms=self._stt_prompt_terms(self._wake_match_phrases()),
             sample_rate=self._cfg.stt.sample_rate,
             vad=self._cfg.stt.vad,
             post_speech_silence_duration=self._cfg.stt.post_speech_silence_duration,
@@ -669,7 +673,7 @@ class SpeechController:
                 use_main_model_for_realtime=self._cfg.stt.use_main_model_for_realtime,
                 mode="wake",
                 wake_names=list(names),
-                prompt_terms=self._wake_match_phrases(names),
+                prompt_terms=self._stt_prompt_terms(self._wake_match_phrases(names)),
                 sample_rate=self._cfg.stt.sample_rate,
                 vad=self._cfg.stt.vad,
                 post_speech_silence_duration=self._cfg.stt.post_speech_silence_duration,
