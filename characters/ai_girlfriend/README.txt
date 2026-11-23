@@ -1,0 +1,1 @@
+Benny V7 Surprised - REVIEW ONLY. Do not install until visual confirmation. 000 uses feathered idle mouth; 001-003 are reordered existing surprised frames. All images 1086x1448 RGBA. No program files changed.

@@ -1,0 +1,105 @@
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+pytest-cache-files-*/
+htmlcov/
+
+# --- Virtualenvs ---------------------------------------------------------
+.venv/
+venv/
+env/
+backend/.venv/
+
+# --- Node / JS -----------------------------------------------------------
+node_modules/
+dist/
+.vite/
+.next/
+coverage/
+.eslintcache
+
+# --- Rust / Tauri --------------------------------------------------------
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+src-tauri/target/
+
+# --- Logs + tmp ----------------------------------------------------------
+*.log
+*.log.*
+*.tmp
+.tmp/
+diagnostics/
+
+# --- Env + secrets -------------------------------------------------------
+.env
+config/user.yaml
+.env.*
+!.env.example
+
+# --- IDE / OS noise ------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- OpenMimicry-specific ------------------------------------------------
+# Character art, personality prompts, reference voices, and exported
+# companion profiles may carry third-party copyright or biometric material.
+# New local assets are private-by-default. Only the three redistributable
+# built-in packs remain eligible for source control.
+/characters/*
+!/characters/mimic_blue/
+!/characters/mimic_blue/**
+!/characters/octomimic/
+!/characters/octomimic/**
+!/characters/octomimic_vrm/
+!/characters/octomimic_vrm/**
+/characters/octomimic_vrm/*.vrm
+/config/personality.local.yml
+/config/companions/
+/config/voice-profiles/
+/.openmimicry/
+/local-companions/
+~$*
+
+# --- Benny personal setup ------------------------------------------------
+# Track Benny's own character packs and settings (local-only repo).
+!/characters/ai_girlfriend/
+!/characters/ai_girlfriend/**
+!/characters/benny/
+!/characters/benny/**
+!/characters/dingdong/
+!/characters/dingdong/**
+!config/user.yaml
+# Ad-hoc backups and patch leftovers (archived under _archive/).
+/_archive/
+/backups/
+/diagnostic-backups/
+/data/
+/backup_tts_*/
+/benny-emotion-*/
+/happy_speaking/
+*.bak
+*.bak[-_]*
+*.backup*
+*.before[-_.]*
+*.before
+*.timeout-backup
+*.qwen-backup
+*.wav
+*.zip
+/.benny-launcher/
+/v/

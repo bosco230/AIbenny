@@ -1,0 +1,434 @@
+﻿===== packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py =====
+ 365:                     await play_task
+ 366:             self._resolve_speech_ready(ready_future, False)
+ 367:             raise
+ 368:         except Exception as exc:
+ 369:             self._tts_ready = False
+ 370:             failure_message = str(exc) or type(exc).__name__
+ 371:             _log.warning("SpeechController: tts.speak raised: %s", exc, exc_info=True)
+ 372:             if play_task is not None and not play_task.done():
+ 373:                 play_task.cancel()
+ 374:             with suppress(Exception):
+ 375:                 await self._tts.stop()
+ 376:             if play_task is not None:
+ 377:                 with suppress(asyncio.CancelledError, Exception):
+ 378:                     await play_task
+ 379:             self._resolve_speech_ready(ready_future, False)
+ 380:         finally:
+ 381:             self._resolve_speech_ready(ready_future, False)
+ 382:             if cancelled:
+ 383:                 self._bus.publish(TTSInterrupted(ts=_now(), utterance_id=utterance_id))
+ 384:             elif failure_message is not None:
+ 385:                 self._bus.publish(
+ 386:                     TTSFailed(
+ 387:                         ts=_now(),
+ 388:                         utterance_id=utterance_id,
+ 389:                         message=failure_message,
+ 390:                     )
+ 391:                 )
+ 392:             else:
+ 393:                 self._bus.publish(TTSFinished(ts=_now(), utterance_id=utterance_id))
+ 394:             if self._current_utterance_id == utterance_id:
+ 395:                 self._current_utterance_id = None
+ 396:                 self._current_tts_task = None
+ 397:                 self._speech_ready = None
+ 398:             if resume_listening is not None and self._started and not self._ptt_active:
+ 399:                 try:
+ 400:                     await self._restore_passive_listening(resume_listening)
+ 401:                 except Exception as exc:
+ 402:                     _log.warning(
+ 403:                         "SpeechController: could not restore listening after TTS: %s",
+ 404:                         exc,
+ 405:                         exc_info=True,
+ 406:                     )
+ 407: 
+ 408:     @staticmethod
+ 409:     def _resolve_speech_ready(future: asyncio.Future[bool], ready: bool) -> None:
+ 410:         if future is not None and not future.done():
+ 411:             future.set_result(ready)
+ 412: 
+ 413:     async def interrupt(self) -> None:
+ 414:         """Request TTS stop without letting a device driver freeze input.
+ 415: 
+ 416:         Third-party audio shutdown continues in the background when it cannot
+ 417:         settle within the short PTT latency budget.  The adapter owns the
+ 418:         bounded worker cleanup and replacement lane.
+ 419:         """
+ 420: 
+ 421:         task = self._current_tts_task
+ 422:         self._current_tts_task = None
+ 423:         self._current_utterance_id = None
+ 424:         if task is None or task.done():
+ 425:             # Nothing is playing; keep the persistent TTS worker alive.
+ 426:             return
+ 427:         task.cancel()
+ 428:         try:
+ 429:             async with asyncio.timeout(_INTERRUPT_SETTLE_TIMEOUT_SECONDS):
+ 430:                 await asyncio.shield(task)
+ 431:         except TimeoutError:
+ 432:             _log.warning(
+ 433:                 "SpeechController: TTS interrupt still settling after %.2fs; "
+ 434:                 "voice input will continue while audio cleanup runs",
+ 435:                 _INTERRUPT_SETTLE_TIMEOUT_SECONDS,
+===== apps\backend\src\openmimicry_backend\ws.py =====
+   1: """``ws.py`` â€” WebSocket endpoint + a multicast :class:`BroadcastBridge`.
+   2: 
+   3: The bridge is what the avatar runtime publishes ``avatar.directive``
+   4: messages through; every active socket sees them. The same bridge serves
+   5: projected :class:`RuntimeEvent`s from the bus â€” every WS connection opens
+   6: its own subscription, projects, and forwards.
+   7: 
+   8: The frontend wire protocol is defined in ``docs/contracts.md`` Â§9. We
+   9: accept these inbound messages:
+  10: 
+  11: * ``user.text``  -> publish :class:`UserTextSubmitted`
+  12: * ``ptt.down`` / ``ptt.up`` -> ``SpeechController.ptt_down/up``
+  13: * ``mode.toggle`` -> publish :class:`ConfigUpdated` + apply on the
+  14:   speech controller for the two keys it understands.
+  15: * ``task.cancel`` -> cancel a running task when its adapter supports it.
+  16: """
+  17: 
+  18: from __future__ import annotations
+  19: 
+  20: import asyncio
+  21: import contextlib
+  22: import logging
+  23: from collections.abc import Awaitable, Callable
+  24: from datetime import datetime, timezone
+  25: from typing import Any
+  26: 
+  27: from fastapi import WebSocket, WebSocketDisconnect
+  28: from openmimicry.core import (
+  29:     ConfigUpdated,
+  30:     ErrorEvent,
+  31:     EventBus,
+  32:     SpeechController,
+  33: )
+  34: 
+  35: from .conversation import TurnSubmission
+  36: from .supervisor import TurnSource
+  37: 
+  38: from .projection import project_messages
+  39: 
+  40: __all__ = [
+  41:     "BroadcastBridge",
+  42:     "ws_endpoint",
+  43: ]
+  44: 
+  45: 
+  46: _log = logging.getLogger(__name__)
+  47: 
+  48: 
+  49: def _now() -> datetime:
+  50:     return datetime.now(timezone.utc)
+  51: 
+  52: 
+  53: # ---------------------------------------------------------------------------
+  54: # BroadcastBridge
+  55: # ---------------------------------------------------------------------------
+  56: 
+  57: 
+  58: class BroadcastBridge:
+  59:     """Process-wide WebSocket fan-out.
+  60: 
+  61:     Implements the structural ``WSBridge`` Protocol (``async def
+  62:     publish(message: dict) -> None``) without importing it from the
+  63:     avatar package â€” keeps this file free of sibling-package imports.
+  64: 
+  65:     Each connected socket is registered via :meth:`add_socket` /
+  66:     :meth:`remove_socket` and receives every ``publish`` call. A failed
+  67:     send is logged and removes the offending socket from the fan-out
+  68:     set so a dead client doesn't poison the broadcast.
+  69:     """
+  70: 
+  71:     def __init__(self) -> None:
+  72:         self._sockets: set[WebSocket] = set()
+  73:         self._send_locks: dict[WebSocket, asyncio.Lock] = {}
+  74:         self._lock = asyncio.Lock()
+  75:         self._latest_avatar: dict[str, Any] | None = None
+  76:         self._latest_bubble: dict[str, Any] | None = None
+  77:         self._latest_runtime: dict[str, Any] | None = None
+  78:         self._latest_turn: dict[str, Any] | None = None
+  79:         self._component_health: dict[str, dict[str, Any]] = {}
+  80:         self._latest_tasks: dict[str, dict[str, Any]] = {}
+  81:         self._conversation: dict[str, dict[str, Any]] = {}
+  82: 
+  83:     async def add_socket(self, ws: WebSocket) -> bool:
+  84:         async with self._lock:
+  85:             self._sockets.add(ws)
+  86:             self._send_locks.setdefault(ws, asyncio.Lock())
+  87:             replay = [message for message in (self._latest_runtime,) if message is not None]
+  88:             replay.extend(self._component_health.values())
+  89:             replay.extend(
+  90:                 message
+  91:                 for message in (self._latest_turn, self._latest_avatar, self._latest_bubble)
+  92:                 if message is not None
+  93:             )
+  94:             replay.extend(self._conversation.values())
+  95:             replay.extend(self._latest_tasks.values())
+  96:         for message in replay:
+  97:             if not await self.send(ws, message):
+  98:                 return False
+  99:         return True
+ 100: 
+ 101:     async def remove_socket(self, ws: WebSocket) -> None:
+ 102:         async with self._lock:
+ 103:             self._sockets.discard(ws)
+ 104:             self._send_locks.pop(ws, None)
+ 105: 
+ 106:     @property
+ 107:     def socket_count(self) -> int:
+ 108:         return len(self._sockets)
+ 109: 
+ 110:     async def publish(self, message: dict[str, Any]) -> None:
+ 111:         """Fan ``message`` out to every connected socket. Never raises."""
+ 112:         dead: list[WebSocket] = []
+ 113:         async with self._lock:
+ 114:             self._remember_unlocked(message)
+ 115:             sockets = list(self._sockets)
+ 116:         for ws in sockets:
+ 117:             if not await self.send(ws, message, remove_on_failure=False):
+ 118:                 dead.append(ws)
+ 119:         if dead:
+ 120:             async with self._lock:
+ 121:                 for ws in dead:
+ 122:                     self._sockets.discard(ws)
+ 123:                     self._send_locks.pop(ws, None)
+ 124: 
+ 125:     async def send(
+ 126:         self,
+ 127:         ws: WebSocket,
+ 128:         message: dict[str, Any],
+ 129:         *,
+ 130:         remove_on_failure: bool = True,
+ 131:     ) -> bool:
+ 132:         """Serialize all writes to one socket and absorb close/send races."""
+ 133: 
+ 134:         async with self._lock:
+ 135:             if ws not in self._sockets:
+ 136:                 return False
+ 137:             send_lock = self._send_locks.setdefault(ws, asyncio.Lock())
+ 138:         try:
+ 139:             async with send_lock:
+ 140:                 await ws.send_json(message)
+ 141:         except Exception as exc:
+ 142:             _log.info("WebSocket send dropped: type=%s error=%s", message.get("type"), exc)
+ 143:             if remove_on_failure:
+ 144:                 await self.remove_socket(ws)
+ 145:             return False
+ 146:         return True
+ 147: 
+ 148:     async def remember(self, message: dict[str, Any]) -> None:
+ 149:         """Retain UI state so windows opened later receive a coherent view."""
+ 150: 
+ 151:         async with self._lock:
+ 152:             self._remember_unlocked(message)
+ 153: 
+ 154:     def _remember_unlocked(self, message: dict[str, Any]) -> None:
+ 155:         if message.get("type") == "avatar.directive":
+ 156:             self._latest_avatar = dict(message)
+ 157:         elif message.get("type") == "runtime.state":
+ 158:             self._latest_runtime = dict(message)
+ 159:         elif message.get("type") == "turn.state":
+ 160:             # A rejected attempt is not the current turn and must not replace
+ 161:             # the authoritative state replayed to newly opened windows.
+ 162:             if message.get("state") != "rejected":
+ 163:                 self._latest_turn = dict(message)
+ 164:         elif message.get("type") == "component.health":
+ 165:             component = message.get("component")
+ 166:             if isinstance(component, str) and component:
+ 167:                 self._component_health[component] = dict(message)
+ 168:         elif message.get("type") == "bubble.text":
+ 169:             if message.get("reset") is True:
+ 170:                 self._latest_bubble = None
+ 171:             elif message.get("complete") is True:
+ 172:                 self._latest_bubble = dict(message)
+ 173:         elif message.get("type") == "conversation.turn":
+ 174:             turn_id = message.get("id")
+ 175:             if isinstance(turn_id, str) and turn_id:
+ 176:                 self._conversation[turn_id] = dict(message)
+ 177:                 while len(self._conversation) > 100:
+ 178:                     self._conversation.pop(next(iter(self._conversation)))
+ 179:         elif message.get("type") == "task.card":
+ 180:             update = message.get("update")
+===== apps\backend\src\openmimicry_backend\projection.py =====
+   1: """``project(event) -> dict | None``: RuntimeEvent -> frontend wire-protocol.
+   2: 
+   3: The wire protocol is defined in ``docs/contracts.md`` Â§9. There are six
+   4: inbound message shapes (server -> frontend):
+   5: 
+   6: * ``avatar.directive`` â€” emitted by the avatar runtime via its WSBridge,
+   7:   **not** synthesised here. Director state-transitions trigger the runtime,
+   8:   the runtime calls ``WSBridge.publish(...)``, and that lands on the
+   9:   socket alongside our projected events. This projector therefore
+  10:   returns ``None`` for events that the avatar director would map to
+  11:   directives (``LLMStarted``, ``TTSStarted``, ``UserSpeechStarted``,
+  12:   â€¦) â€” duplication would let the same state flip twice on the wire.
+  13: * ``transcript.preview`` â€” partial STT projection.
+  14: * ``bubble.text`` â€” LLM token stream and final reply.
+  15: * ``conversation.turn`` â€” replayable user/assistant history for the dashboard.
+  16: * ``task.card`` â€” TaskSubmitted / TaskUpdatedEvent / TaskCompleted.
+  17: * ``system.notice`` â€” wake detection, config updates, errors,
+  18:   TTSInterrupted user-facing warnings.
+  19: 
+  20: Every projection returns a plain JSON-serialisable ``dict``. Pydantic
+  21: models are dumped with ``model_dump(mode="json")`` so ``datetime`` -> ISO
+  22: string and ``set`` -> ``list``.
+  23: """
+  24: 
+  25: from __future__ import annotations
+  26: 
+  27: import logging
+  28: from typing import Any
+  29: 
+  30: from openmimicry.core.schemas import (
+  31:     AvatarCue,
+  32:     ComponentHealthChanged,
+  33:     ConfigUpdated,
+  34:     ErrorEvent,
+  35:     LLMReplyComplete,
+  36:     LLMStarted,
+  37:     LLMTokenStreamed,
+  38:     RuntimeEvent,
+  39:     RuntimeStateChanged,
+  40:     TaskCompleted,
+  41:     TaskSubmitted,
+  42:     TaskUpdate,
+  43:     TaskUpdatedEvent,
+  44:     TranscriptPreview,
+  45:     TurnStateChanged,
+  46:     TTSChunkSpoken,
+  47:     TTSFailed,
+  48:     TTSFinished,
+  49:     TTSInterrupted,
+  50:     TTSQueued,
+  51:     TTSReady,
+  52:     TTSStarted,
+  53:     UserSpeechFinal,
+  54:     UserSpeechStarted,
+  55:     UserTextSubmitted,
+  56:     WakeDetected,
+  57: )
+  58: 
+  59: __all__ = ["project", "project_messages"]
+  60: 
+  61: 
+  62: _log = logging.getLogger(__name__)
+  63: 
+  64: 
+  65: def project(event: RuntimeEvent) -> dict[str, Any] | None:
+  66:     """Map ``event`` to a wire-protocol dict, or ``None`` to suppress.
+  67: 
+  68:     Returning ``None`` is significant â€” it means "this event is already
+  69:     represented on the wire by some other producer" (typically the avatar
+  70:     runtime emitting ``avatar.directive``).
+  71:     """
+  72:     if isinstance(event, TranscriptPreview):
+  73:         return {
+  74:             "type": "transcript.preview",
+  75:             "text": event.text,
+  76:             "is_final": event.is_final,
+  77:         }
+  78: 
+  79:     if isinstance(event, TurnStateChanged):
+  80:         return {
+  81:             "type": "turn.state",
+  82:             "turn_id": event.turn_id,
+  83:             "sequence": event.sequence,
+  84:             "state": event.state,
+  85:             "source": event.source,
+  86:             "reason": event.reason,
+  87:             "active_turn_id": event.active_turn_id,
+  88:             "ts": event.ts.isoformat(),
+  89:         }
+  90: 
+  91:     if isinstance(event, RuntimeStateChanged):
+  92:         return {
+  93:             "type": "runtime.state",
+  94:             "instance_id": event.instance_id,
+  95:             "state": event.state,
+  96:             "ready": event.ready,
+  97:             "reason": event.reason,
+  98:             "ts": event.ts.isoformat(),
+  99:         }
+ 100: 
+ 101:     if isinstance(event, ComponentHealthChanged):
+ 102:         return {
+ 103:             "type": "component.health",
+ 104:             "instance_id": event.instance_id,
+ 105:             "component": event.component,
+ 106:             "family": event.family,
+ 107:             "adapter": event.adapter,
+ 108:             "state": event.state,
+ 109:             "required": event.required,
+ 110:             "actual_device": event.actual_device,
+ 111:             "last_error": event.last_error,
+ 112:             "ts": event.ts.isoformat(),
+ 113:         }
+ 114: 
+ 115:     if isinstance(event, LLMTokenStreamed):
+ 116:         return {
+ 117:             "type": "bubble.text",
+ 118:             "text": event.delta,
+ 119:             "complete": False,
+ 120:         }
+ 121: 
+ 122:     if isinstance(event, LLMReplyComplete):
+ 123:         if event.presentation_mode == "voice_only":
+ 124:             return None
+ 125:         return {
+ 126:             "type": "bubble.text",
+ 127:             "text": event.full_text,
+ 128:             "complete": True,
+ 129:             "presentation_mode": event.presentation_mode,
+ 130:             "speech_expected": event.speech_expected,
+ 131:             "utterance_id": event.speech_utterance_id,
+ 132:         }
+ 133: 
+ 134:     if isinstance(event, TaskSubmitted):
+ 135:         # Synthesise a TaskUpdate with status "queued" so the frontend has
+ 136:         # a uniform shape for the task.card schema.
+ 137:         synthetic = TaskUpdate(
+ 138:             handle=event.handle,
+ 139:             status="queued",
+ 140:             note=event.summary,
+ 141:             ts=event.ts,
+ 142:         )
+ 143:         return {"type": "task.card", "update": synthetic.model_dump(mode="json")}
+ 144: 
+ 145:     if isinstance(event, TaskUpdatedEvent):
+ 146:         return {
+ 147:             "type": "task.card",
+ 148:             "update": event.update.model_dump(mode="json"),
+ 149:         }
+ 150: 
+ 151:     if isinstance(event, TaskCompleted):
+ 152:         # TaskCompleted -> task.card with the result projected as a final
+ 153:         # TaskUpdate. The status is whatever the result carries.
+ 154:         final = TaskUpdate(
+ 155:             handle=event.handle,
+ 156:             status=event.result.status,
+ 157:             note=event.result.summary,
+ 158:             artifacts=event.result.artifacts,
+ 159:             error=event.result.error,
+ 160:             ts=event.ts,
+ 161:         )
+ 162:         return {"type": "task.card", "update": final.model_dump(mode="json")}
+ 163: 
+ 164:     if isinstance(event, WakeDetected):
+ 165:         return {
+ 166:             "type": "system.notice",
+ 167:             "level": "info",
+ 168:             "message": f"wake:{event.name}",
+ 169:         }
+ 170: 
+ 171:     if isinstance(event, TTSInterrupted):
+ 172:         return {
+ 173:             "type": "system.notice",
+ 174:             "level": "warn",
+ 175:             "message": "tts_interrupted",
+ 176:         }
+ 177: 
+ 178:     if isinstance(event, ConfigUpdated):
+ 179:         return {
+ 180:             "type": "system.notice",

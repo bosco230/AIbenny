@@ -1,0 +1,646 @@
+﻿===== packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py =====
+  65:     """Retrieve a detached cleanup task's terminal exception, if any."""
+  66: 
+  67:     with suppress(asyncio.CancelledError, Exception):
+  68:         task.result()
+  69: 
+  70: 
+  71: class SpeechController:
+  72:     """Concrete ``SpeechController``.
+  73: 
+  74:     Wires an STT adapter, a TTS adapter, the event bus, and the voice
+  75:     config together. Tests pass any STTAdapter / TTSAdapter that satisfies
+  76:     the Protocol (typically ``MockSTTAdapter`` / ``MockTTSAdapter``).
+  77:     """
+  78: 
+  79:     def __init__(
+  80:         self,
+  81:         *,
+  82:         stt: STTAdapter,
+  83:         tts: TTSAdapter,
+  84:         bus: EventBus,
+  85:         config: VoiceConfig | None = None,
+  86:     ) -> None:
+  87:         self._stt = stt
+  88:         self._tts = tts
+  89:         self._bus = bus
+  90:         self._cfg: VoiceConfig = config or VoiceConfig()
+  91: 
+  92:         self._current_tts_task: asyncio.Task[None] | None = None
+  93:         self._current_utterance_id: str | None = None
+  94:         self._speech_ready: asyncio.Future[bool] | None = None
+  95:         self._live_listener_task: asyncio.Task[None] | None = None
+  96:         self._barge_in_task: asyncio.Task[None] | None = None
+  97:         self._ptt_active: bool = False
+  98:         self._live_listening: bool = False
+  99:         self._listening_mode: str | None = None
+ 100:         self._configured_wake_names: list[str] = _normalise_wake_names(self._cfg.stt.wake.names)
+ 101:         self._configured_wake_aliases: list[str] = _normalise_wake_names(self._cfg.stt.wake.aliases)
+ 102:         self._live_wake_names: list[str] = []
+ 103:         self._resume_listening_after_ptt: tuple[str, list[str]] | None = None
+ 104:         self._started: bool = False
+ 105:         self._stt_ready: bool = False
+ 106:         self._tts_ready: bool = False
+ 107:         self._last_accepted_wake: tuple[str, float] | None = None
+ 108: 
+ 109:     @property
+ 110:     def is_speaking(self) -> bool:
+ 111:         return self._tts.is_speaking
+ 112: 
+ 113:     @property
+ 114:     def live_listening(self) -> bool:
+ 115:         return self._live_listening
+ 116: 
+ 117:     @property
+ 118:     def continuous_listening(self) -> bool:
+ 119:         return self._live_listening and self._listening_mode == "continuous"
+ 120: 
+ 121:     @property
+ 122:     def listening_mode(self) -> str:
+ 123:         if self._ptt_active:
+ 124:             return "push_to_talk"
+ 125:         return self._listening_mode or "off"
+ 126: 
+ 127:     @property
+ 128:     def ptt_active(self) -> bool:
+ 129:         return self._ptt_active
+ 130: 
+ 131:     @property
+ 132:     def wake_names(self) -> list[str]:
+ 133:         """Configured wake-name prefixes, returned as a defensive copy."""
+ 134: 
+ 135:         return list(self._configured_wake_names)
+ 136: 
+ 137:     @property
+ 138:     def wake_aliases(self) -> list[str]:
+ 139:         return list(self._configured_wake_aliases)
+ 140: 
+ 141:     @property
+ 142:     def stt_model(self) -> str:
+ 143:         return self._cfg.stt.model
+ 144: 
+ 145:     @property
+ 146:     def post_speech_silence_duration(self) -> float:
+ 147:         """Seconds of silence required before STT finalises an utterance."""
+ 148: 
+ 149:         return self._cfg.stt.post_speech_silence_duration
+ 150: 
+ 151:     @property
+ 152:     def speech_readiness_timeout_s(self) -> float:
+ 153:         """Maximum bounded wait for this profile's first audio frame."""
+ 154: 
+ 155:         return self._cfg.tts.readiness_timeout_s
+ 156: 
+ 157:     @property
+ 158:     def stt(self) -> STTAdapter:
+ 159:         return self._stt
+ 160: 
+ 161:     @property
+ 162:     def tts(self) -> TTSAdapter:
+ 163:         return self._tts
+ 164: 
+ 165:     @property
+ 166:     def stt_ready(self) -> bool:
+ 167:         return self._stt_ready
+ 168: 
+ 169:     @property
+ 170:     def tts_ready(self) -> bool:
+ 171:         return self._tts_ready
+ 172: 
+ 173:     # ---------------------------------------------------------------- lifecycle
+ 174: 
+ 175:     async def start(self) -> None:
+===== packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py =====
+ 205:                 )
+ 206:                 self._tts_ready = True
+ 207:             except Exception as exc:
+ 208:                 self._tts_ready = False
+ 209:                 _log.error(
+ 210:                     "SpeechController: TTS preflight failed; text remains available: %s", exc
+ 211:                 )
+ 212:         else:
+ 213:             self._tts_ready = True
+ 214:         # Barge-in watcher runs for the controller's lifetime.
+ 215:         self._barge_in_task = asyncio.create_task(
+ 216:             self._barge_in_loop(), name="openmimicry.voice.barge_in"
+ 217:         )
+ 218: 
+ 219:     async def stop(self) -> None:
+ 220:         if not self._started:
+ 221:             return
+ 222:         self._started = False
+ 223:         await self.disable_live_listening()
+ 224:         await self.interrupt()
+ 225:         if self._barge_in_task is not None:
+ 226:             self._barge_in_task.cancel()
+ 227:             with suppress(asyncio.CancelledError, Exception):
+ 228:                 await self._barge_in_task
+ 229:             self._barge_in_task = None
+ 230:         with suppress(Exception):
+ 231:             await self._stt.stop()
+ 232:         for adapter in (self._stt, self._tts):
+ 233:             close = getattr(adapter, "close", None)
+ 234:             if callable(close):
+ 235:                 with suppress(Exception):
+ 236:                     await cast(Callable[..., Awaitable[Any]], close)()
+ 237: 
+ 238:     # --------------------------------------------------------- TTS / barge-in
+ 239: 
+ 240:     async def say(
+ 241:         self,
+ 242:         text_or_stream: str | AsyncIterable[str],
+ 243:         *,
+ 244:         utterance_id: str | None = None,
+ 245:     ) -> str:
+ 246:         """Speak ``text_or_stream``. Cancels any in-flight utterance first."""
+ 247:         await self.interrupt()
+ 248:         # Default laptop/speaker operation must not leave STT listening to the
+ 249:         # avatar's own voice. That caused false barge-in, cancelled replies,
+ 250:         # growing audio queues, and feedback transcripts. Advanced users can
+ 251:         # opt back into VAD barge-in explicitly.
+ 252:         resume: tuple[str, list[str]] | None = None
+ 253:         if (
+ 254:             not self._cfg.modes.barge_in_enabled
+ 255:             and self._live_listening
+ 256:             and self._listening_mode is not None
+ 257:         ):
+ 258:             resume = (self._listening_mode, list(self._live_wake_names))
+ 259:             await self._stop_passive_listening()
+ 260:         utterance_id = utterance_id or uuid4().hex
+ 261:         ready = asyncio.get_running_loop().create_future()
+ 262:         self._current_utterance_id = utterance_id
+ 263:         self._speech_ready = ready
+ 264:         self._bus.publish(TTSQueued(ts=_now(), utterance_id=utterance_id))
+ 265:         self._current_tts_task = asyncio.create_task(
+ 266:             self._speak_once(text_or_stream, utterance_id, ready, resume),
+ 267:             name=f"openmimicry.voice.say.{utterance_id[:8]}",
+ 268:         )
+ 269:         return utterance_id
+ 270: 
+ 271:     async def wait_until_speech_ready(
+ 272:         self, *, timeout_s: float = 10.0, utterance_id: str | None = None
+ 273:     ) -> bool:
+ 274:         """Wait until the TTS adapter reports that speaker playback began."""
+ 275: 
+ 276:         if utterance_id is not None and utterance_id != self._current_utterance_id:
+ 277:             return False
+ 278:         ready = self._speech_ready
+ 279:         if ready is None:
+ 280:             return False
+ 281:         try:
+ 282:             async with asyncio.timeout(max(0.05, timeout_s)):
+ 283:                 return bool(await asyncio.shield(ready))
+ 284:         except TimeoutError:
+ 285:             _log.error("SpeechController: TTS readiness timed out after %.1fs", timeout_s)
+ 286:             return False
+ 287:         except Exception as exc:
+ 288:             _log.warning("SpeechController: TTS readiness wait failed: %s", exc)
+ 289:             return False
+ 290: 
+ 291:     async def _speak_once(
+ 292:         self,
+ 293:         text_or_stream: str | AsyncIterable[str],
+ 294:         utterance_id: str,
+ 295:         ready_future: asyncio.Future[bool],
+===== packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py =====
+ 300:             voice=self._cfg.tts.voice,
+ 301:             rate=self._cfg.tts.rate,
+ 302:             interruptible=self._cfg.tts.interruptible,
+ 303:         )
+ 304:         cancelled = False
+ 305:         failure_message: str | None = None
+ 306:         play_task: asyncio.Task[None] | None = None
+ 307: 
+ 308:         def _publish_lip_sync_frames(chunk: object) -> None:
+ 309:             if self._current_utterance_id != utterance_id:
+ 310:                 return
+ 311:             if play_task is None or play_task is not asyncio.current_task():
+ 312:                 return
+ 313:             if not isinstance(chunk, dict):
+ 314:                 return
+ 315:             if chunk.get("type") != "lip_sync.frames":
+ 316:                 return
+ 317: 
+ 318:             frames = chunk.get("frames")
+ 319:             window_ms = chunk.get("window_ms", 40)
+ 320: 
+ 321:             if not isinstance(frames, list):
+ 322:                 return
+ 323: 
+ 324:             try:
+ 325:                 event = TTSLipSyncFrames(
+ 326:                     ts=_now(),
+ 327:                     utterance_id=utterance_id,
+ 328:                     window_ms=window_ms,
+ 329:                     frames=frames,
+ 330:                 )
+ 331:             except (TypeError, ValueError) as exc:
+ 332:                 _log.warning("Invalid lip-sync frames: %s", exc)
+ 333:                 return
+ 334: 
+ 335:             self._bus.publish(event)
+ 336: 
+ 337:         try:
+ 338:             play_task = asyncio.create_task(
+ 339:                 self._tts.speak(
+ 340:                     text_or_stream,
+ 341:                     config=tts_config,
+ 342:                     on_chunk=_publish_lip_sync_frames,
+ 343:                 ),
+ 344:                 name="openmimicry.voice.tts_adapter",
+ 345:             )
+ 346:             # Give the adapter one loop turn to replace its prior readiness
+ 347:             # Event. Without this, reply two could observe reply one's Event.
+ 348:             await asyncio.sleep(0)
+ 349:             waiter = getattr(self._tts, "wait_until_ready", None)
+ 350:             if callable(waiter):
+ 351:                 ready_task = asyncio.create_task(
+ 352:                     cast(Callable[..., Awaitable[Any]], waiter)(
+ 353:                         timeout_s=self._cfg.tts.readiness_timeout_s
+ 354:                     ),
+ 355:                     name="openmimicry.voice.tts_ready",
+ 356:                 )
+ 357:                 done, _pending = await asyncio.wait(
+ 358:                     {ready_task, play_task}, return_when=asyncio.FIRST_COMPLETED
+ 359:                 )
+ 360:                 audio_ready = bool(ready_task.result()) if ready_task in done else False
+ 361:                 if not ready_task.done():
+ 362:                     ready_task.cancel()
+ 363:                     with suppress(asyncio.CancelledError, Exception):
+ 364:                         await ready_task
+ 365:             else:
+ 366:                 audio_ready = True
+ 367:             self._resolve_speech_ready(ready_future, audio_ready)
+ 368:             # Speaking is a playback state, not a synthesis/queue state.  A
+ 369:             # failed or stale TTS job must never replace listening/thinking.
+ 370:             if audio_ready and self._current_tts_task is asyncio.current_task():
+ 371:                 self._tts_ready = True
+ 372:                 self._bus.publish(TTSReady(ts=_now(), utterance_id=utterance_id))
+ 373:                 self._bus.publish(TTSStarted(ts=_now(), utterance_id=utterance_id))
+ 374:             elif not audio_ready:
+ 375:                 failure_message = "Text-to-speech playback did not become ready."
+ 376:             timeout_s = _playback_timeout_seconds(text_or_stream)
+ 377:             try:
+ 378:                 async with asyncio.timeout(timeout_s):
+ 379:                     await play_task
+ 380:             except TimeoutError:
+ 381:                 _log.error(
+ 382:                     "SpeechController: TTS playback exceeded %.1fs; forcing recovery",
+ 383:                     timeout_s,
+ 384:                 )
+ 385:                 failure_message = f"Text-to-speech playback exceeded {timeout_s:.1f}s."
+ 386:                 if not play_task.done():
+ 387:                     play_task.cancel()
+ 388:                 with suppress(Exception):
+ 389:                     await self._tts.stop()
+ 390:                 with suppress(asyncio.CancelledError, Exception):
+ 391:                     await play_task
+ 392:         except asyncio.CancelledError:
+ 393:             cancelled = True
+ 394:             if play_task is not None and not play_task.done():
+ 395:                 play_task.cancel()
+ 396:             with suppress(Exception):
+ 397:                 await self._tts.stop()
+ 398:             if play_task is not None:
+ 399:                 with suppress(asyncio.CancelledError, Exception):
+ 400:                     await play_task
+ 401:             self._resolve_speech_ready(ready_future, False)
+ 402:             raise
+ 403:         except Exception as exc:
+ 404:             self._tts_ready = False
+ 405:             failure_message = str(exc) or type(exc).__name__
+ 406:             _log.warning("SpeechController: tts.speak raised: %s", exc, exc_info=True)
+ 407:             if play_task is not None and not play_task.done():
+ 408:                 play_task.cancel()
+ 409:             with suppress(Exception):
+ 410:                 await self._tts.stop()
+ 411:             if play_task is not None:
+ 412:                 with suppress(asyncio.CancelledError, Exception):
+ 413:                     await play_task
+ 414:             self._resolve_speech_ready(ready_future, False)
+ 415:         finally:
+ 416:             self._resolve_speech_ready(ready_future, False)
+ 417:             if cancelled:
+ 418:                 self._bus.publish(TTSInterrupted(ts=_now(), utterance_id=utterance_id))
+ 419:             elif failure_message is not None:
+ 420:                 self._bus.publish(
+ 421:                     TTSFailed(
+ 422:                         ts=_now(),
+ 423:                         utterance_id=utterance_id,
+ 424:                         message=failure_message,
+ 425:                     )
+ 426:                 )
+ 427:             else:
+ 428:                 self._bus.publish(TTSFinished(ts=_now(), utterance_id=utterance_id))
+ 429:             if self._current_utterance_id == utterance_id:
+ 430:                 self._current_utterance_id = None
+ 431:                 self._current_tts_task = None
+ 432:                 self._speech_ready = None
+ 433:             if resume_listening is not None and self._started and not self._ptt_active:
+ 434:                 try:
+ 435:                     await self._restore_passive_listening(resume_listening)
+ 436:                 except Exception as exc:
+ 437:                     _log.warning(
+ 438:                         "SpeechController: could not restore listening after TTS: %s",
+ 439:                         exc,
+ 440:                         exc_info=True,
+===== packages\openmimicry-core\src\openmimicry\core\bus.py =====
+   1: """Concrete ``EventBus`` — in-process pub/sub with bounded per-subscriber queues.
+   2: 
+   3: The shape of this class is frozen by ``openmimicry.core.contracts.bus``. This
+   4: module is the M0-shipped implementation. The single instance is owned by
+   5: ``Runtime``; modules receive it as a dependency rather than reaching for a
+   6: process-global singleton.
+   7: 
+   8: Drop policy
+   9: -----------
+  10: 
+  11: Each subscriber owns its own ``asyncio.Queue`` of ``maxsize`` (default 1024).
+  12: ``publish`` is non-blocking; if a subscriber's queue is full the **oldest**
+  13: event is dropped to make room for the newest, and a single warning per
+  14: subscriber is logged. This favours liveness of the producer (typically the
+  15: adapter thread) over delivery guarantees on a stalled consumer.
+  16: 
+  17: If you need lossless delivery, drain ``subscribe()`` faster than the producer.
+  18: """
+  19: 
+  20: from __future__ import annotations
+  21: 
+  22: import asyncio
+  23: import contextlib
+  24: import logging
+  25: from collections.abc import AsyncIterator
+  26: 
+  27: from .schemas.events import RuntimeEvent
+  28: 
+  29: __all__ = ["DEFAULT_QUEUE_MAXSIZE", "EventBus"]
+  30: 
+  31: 
+  32: DEFAULT_QUEUE_MAXSIZE: int = 1024
+  33: 
+  34: 
+  35: _log = logging.getLogger(__name__)
+  36: 
+  37: 
+  38: class _Subscription:
+  39:     """One live subscription. Owns its queue and a one-shot warn flag."""
+  40: 
+  41:     __slots__ = ("_closed", "_warned", "queue")
+  42: 
+  43:     def __init__(self, maxsize: int) -> None:
+  44:         self.queue: asyncio.Queue[RuntimeEvent | None] = asyncio.Queue(maxsize=maxsize)
+  45:         self._warned: bool = False
+  46:         self._closed: bool = False
+  47: 
+  48:     @property
+  49:     def closed(self) -> bool:
+  50:         return self._closed
+  51: 
+  52:     def offer(self, event: RuntimeEvent) -> None:
+  53:         """Non-blocking put. Drops the oldest event if the queue is full."""
+  54:         if self._closed:
+  55:             return
+  56:         try:
+  57:             self.queue.put_nowait(event)
+  58:         except asyncio.QueueFull:
+  59:             with contextlib.suppress(asyncio.QueueEmpty):
+  60:                 self.queue.get_nowait()
+  61:             with contextlib.suppress(asyncio.QueueFull):
+  62:                 self.queue.put_nowait(event)
+  63:             if not self._warned:
+  64:                 self._warned = True
+  65:                 _log.warning(
+  66:                     "EventBus subscriber fell behind; dropping oldest events "
+  67:                     "(maxsize=%d). Drain subscribe() faster or raise maxsize.",
+  68:                     self.queue.maxsize,
+  69:                 )
+  70: 
+  71:     def close(self) -> None:
+  72:         """Send a sentinel so a pending ``await get()`` wakes up and stops."""
+  73:         if self._closed:
+  74:             return
+  75:         self._closed = True
+  76:         try:
+  77:             self.queue.put_nowait(None)
+  78:         except asyncio.QueueFull:
+  79:             with contextlib.suppress(asyncio.QueueEmpty):
+  80:                 self.queue.get_nowait()
+  81:             with contextlib.suppress(asyncio.QueueFull):
+  82:                 self.queue.put_nowait(None)
+  83: 
+  84: 
+  85: class EventBus:
+  86:     """The concrete in-process event bus."""
+  87: 
+  88:     def __init__(self, *, maxsize: int = DEFAULT_QUEUE_MAXSIZE) -> None:
+  89:         self._maxsize = maxsize
+  90:         self._subs: list[_Subscription] = []
+  91:         self._closed: bool = False
+  92: 
+  93:     def publish(self, event: RuntimeEvent) -> None:
+  94:         """Fan out one event to every active subscriber. Non-blocking."""
+  95:         if self._closed:
+  96:             return
+  97:         self._reap_closed()
+  98:         for sub in self._subs:
+  99:             sub.offer(event)
+ 100: 
+ 101:     def subscribe(self) -> AsyncIterator[RuntimeEvent]:
+ 102:         """Open a new subscription. Closes when the bus closes.
+ 103: 
+ 104:         Registration is synchronous at call time so any ``publish`` happening
+ 105:         before the caller starts iterating still queues for this subscriber.
+ 106:         The returned async iterator drains that queue until the sentinel.
+ 107:         """
+ 108:         self._reap_closed()
+ 109:         sub = _Subscription(maxsize=self._maxsize)
+ 110:         if self._closed:
+ 111:             sub.close()
+ 112:         else:
+ 113:             self._subs.append(sub)
+ 114:         return self._iter(sub)
+ 115: 
+ 116:     async def _iter(self, sub: _Subscription) -> AsyncIterator[RuntimeEvent]:
+ 117:         """Drain ``sub`` until the bus or the subscriber closes."""
+ 118:         try:
+ 119:             while True:
+ 120:                 item = await sub.queue.get()
+ 121:                 if item is None:
+ 122:                     return
+ 123:                 yield item
+ 124:         finally:
+ 125:             sub.close()
+ 126:             with contextlib.suppress(ValueError):
+ 127:                 self._subs.remove(sub)
+ 128: 
+ 129:     async def aclose(self) -> None:
+ 130:         """Drain and close every subscriber. Safe to call multiple times."""
+ 131:         if self._closed:
+ 132:             return
+ 133:         self._closed = True
+ 134:         for sub in list(self._subs):
+ 135:             sub.close()
+ 136:         # Drop all references so subscriber_count reflects closed state even
+ 137:         # for subscribers whose async-generator finally hasn't run yet.
+ 138:         self._subs.clear()
+ 139:         await asyncio.sleep(0)
+ 140: 
+ 141:     def _reap_closed(self) -> None:
+ 142:         """Drop any subscriptions whose underlying queue has been closed."""
+ 143:         self._subs[:] = [s for s in self._subs if not s.closed]
+ 144: 
+ 145:     @property
+ 146:     def subscriber_count(self) -> int:
+ 147:         """The number of currently-open subscribers. Mostly useful in tests."""
+ 148:         self._reap_closed()
+ 149:         return len(self._subs)
+ 150: 
+ 151:     @property
+ 152:     def closed(self) -> bool:
+ 153:         return self._closed
+===== packages\openmimicry-voice\src\openmimicry\voice\tts\fallback.py =====
+   1: """Azure-first TTS with a lazy Qwen3 fallback."""
+   2: 
+   3: from __future__ import annotations
+   4: 
+   5: import asyncio
+   6: import logging
+   7: from collections.abc import AsyncIterable
+   8: from contextlib import suppress
+   9: 
+  10: from openmimicry.core.schemas import TTSConfig
+  11: 
+  12: from .azure import AzureTTSAdapter
+  13: from .qwen3 import Qwen3TTSAdapter
+  14: from .system_command import _collect_text
+  15: 
+  16: logger = logging.getLogger(__name__)
+  17: 
+  18: 
+  19: class AzureQwen3FallbackTTSAdapter:
+  20:     name = "azure-qwen3-fallback"
+  21: 
+  22:     def __init__(
+  23:         self,
+  24:         azure: AzureTTSAdapter,
+  25:         qwen3: Qwen3TTSAdapter,
+  26:     ) -> None:
+  27:         self._azure = azure
+  28:         self._qwen3 = qwen3
+  29:         self._active = None
+  30:         self._ready = asyncio.Event()
+  31:         self._speaking = False
+  32:         self._generation = 0
+  33: 
+  34:     @property
+  35:     def is_speaking(self) -> bool:
+  36:         return self._speaking
+  37: 
+  38:     async def prepare(self, config: TTSConfig) -> None:
+  39:         # Do not preload Qwen3 while Azure is available.
+  40:         try:
+  41:             await self._azure.prepare(config)
+  42:         except Exception as exc:
+  43:             logger.warning(
+  44:                 "Azure TTS preparation failed; Qwen3 remains available as fallback: %s",
+  45:                 exc,
+  46:             )
+  47: 
+  48:     async def speak(
+  49:         self,
+  50:         text_or_stream: str | AsyncIterable[str],
+  51:         *,
+  52:         config: TTSConfig,
+  53:         on_chunk=None,
+  54:     ) -> None:
+  55:         text = await _collect_text(text_or_stream)
+  56:         if not text.strip():
+  57:             return
+  58: 
+  59:         self._generation += 1
+  60:         generation = self._generation
+  61:         self._ready.clear()
+  62: 
+  63:         self._speaking = True
+  64:         self._active = self._azure
+  65: 
+  66:         async def play(adapter) -> None:
+  67:             task = asyncio.create_task(
+  68:                 adapter.speak(text, config=config, on_chunk=on_chunk)
+  69:             )
+  70:             waiter = getattr(adapter, "wait_until_ready", None)
+  71:             ready_task = (
+  72:                 asyncio.create_task(waiter(timeout_s=180.0))
+  73:                 if callable(waiter)
+  74:                 else None
+  75:             )
+  76:             try:
+  77:                 if ready_task is not None:
+  78:                     done, _ = await asyncio.wait(
+  79:                         {task, ready_task},
+  80:                         return_when=asyncio.FIRST_COMPLETED,
+  81:                     )
+  82:                     if task in done:
+  83:                         await task
+  84:                         if generation == self._generation:
+  85:                             self._ready.set()
+  86:                     if ready_task in done and ready_task.result():
+  87:                         if generation == self._generation:
+  88:                             self._ready.set()
+  89:                 else:
+  90:                     if generation == self._generation:
+  91:                         self._ready.set()
+  92:                 await task
+  93:             finally:
+  94:                 if ready_task is not None:
+  95:                     if not ready_task.done():
+  96:                         ready_task.cancel()
+  97:                     with suppress(asyncio.CancelledError):
+  98:                         await ready_task
+  99:                 if not task.done():
+ 100:                     task.cancel()
+ 101:                     with suppress(asyncio.CancelledError):
+ 102:                         await task
+ 103: 
+ 104:         try:
+ 105:             try:
+ 106:                 await play(self._azure)
+ 107:             except asyncio.CancelledError:
+ 108:                 raise
+ 109:             except Exception as exc:
+ 110:                 logger.warning(
+ 111:                     "Azure TTS failed; switching to Qwen3: %s", exc
+ 112:                 )
+ 113:                 if generation != self._generation:
+ 114:                     return
+ 115:                 self._active = self._qwen3
+ 116:                 await self._qwen3.prepare(config)
+ 117:                 await play(self._qwen3)
+ 118:         finally:
+ 119:             if generation == self._generation:
+ 120:                 self._speaking = False
+ 121:                 self._active = None
+ 122: 
+ 123:     async def wait_until_ready(
+ 124:         self, *, timeout_s: float = 30.0
+ 125:     ) -> bool:
+ 126:         if not self._speaking and self._ready.is_set():
+ 127:             self._ready.clear()
+ 128:         try:
+ 129:             async with asyncio.timeout(timeout_s):
+ 130:                 await self._ready.wait()
+ 131:             return True
+ 132:         except TimeoutError:
+ 133:             return False
+ 134: 
+ 135:     async def stop(self) -> None:
+ 136:         self._generation += 1
+ 137:         self._speaking = False
+ 138:         adapter = self._active
+ 139:         self._active = None
+ 140:         if adapter is not None:
+ 141:             await adapter.stop()
+ 142: 
+ 143:     async def healthcheck(self) -> bool:
+ 144:         return await self._azure.healthcheck()
+ 145: 

@@ -1,0 +1,34 @@
+﻿C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\main.py:158: bridge = BroadcastBridge()
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\main.py:218: wiring.bus.publish(UserTextSubmitted(ts=_utc_now(), text=text.strip()))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\projection.py:8: the runtime calls ``WSBridge.publish(...)``, and that lands on the
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\projection.py:221: def project_messages(event: RuntimeEvent) -> list[dict[str, Any]]:
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\supervisor.py:112: self._bus.publish(event)
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\supervisor.py:210: self._bus.publish(ComponentHealthChanged(ts=_now(), **snapshot))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\supervisor.py:221: self._bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\wiring.py:152: speech: SpeechController = ConcreteSpeechController(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:272: for message in project_messages(event):
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:306: bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:308: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:317: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:327: bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:328: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:335: bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": False}))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:346: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:354: bus.publish(ConfigUpdated(ts=_now(), diff={key: value}))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\ws.py:363: bus.publish(ErrorEvent(ts=_now(), where="backend.task.cancel", message=str(exc)))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\admin.py:57: bus.publish(ConfigUpdated(ts=_now(), diff={"_admin_reload": True}))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\admin.py:65: bus.publish(ConfigUpdated(ts=_now(), diff={"_admin_reload": True}))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:150: bus.publish(ErrorEvent(ts=_now(), where="backend.chat.task", message=str(exc)))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:153: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:164: bus.publish(TaskUpdatedEvent(ts=_now(), update=update))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:168: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:181: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:190: bus.publish(TaskCompleted(ts=_now(), handle=handle, result=result))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:208: bus.publish(LLMStarted(ts=_now()))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:292: bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:324: bus.publish(LLMTokenStreamed(ts=_now(), delta=reply.text))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:325: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\chat.py:401: bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\llm.py:103: wiring.bus.publish(
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\mode.py:167: wiring.bus.publish(ConfigUpdated(ts=_now(), diff=diff))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\backend\src\openmimicry_backend\routes\mode.py:213: bus.publish(ConfigUpdated(ts=_now(), diff={req.key: req.value}))

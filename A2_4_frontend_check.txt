@@ -1,0 +1,796 @@
+﻿===== apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx =====
+   1: /**
+   2:  * Sprite2DRuntime ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the React component that renders frame folders.
+   3:  *
+   4:  * Subscribes to `avatar.directive` messages with `runtime === "sprite2d"`
+   5:  * (delivered via the WS context provided by M7) and advances the current
+   6:  * frame index at the rate the projection specifies. `loop=false` clamps
+   7:  * at the last frame; `loop=true` wraps.
+   8:  *
+   9:  * This component is intentionally dumb. It does not derive state from
+  10:  * `RuntimeEvent`s -- the backend's `AvatarOrchestrator` has already done
+  11:  * that work, and the result arrives as a fully-resolved Sprite2D
+  12:  * projection.
+  13:  */
+  14: 
+  15: import { useEffect, useRef, useState } from "react";
+  16: 
+  17: import { preload } from "./preloader";
+  18: 
+  19: export type Sprite2DProjection = {
+  20:   type: "avatar.directive";
+  21:   runtime: "sprite2d";
+  22:   directive: {
+  23:     state: string;
+  24:     emotion?: string;
+  25:     speaking?: boolean;
+  26:     text?: string | null;
+  27:     [key: string]: unknown;
+  28:   };
+  29:   frames: string[];
+  30:   fps: number;
+  31:   loop: boolean;
+  32: };
+  33: 
+  34: export type Sprite2DRuntimeProps = {
+  35:   /** The current projection. Updated by the WS provider on every directive. */
+  36:   projection?: Sprite2DProjection;
+  37:   /** Optional className passed through to the wrapping element. */
+  38:   className?: string;
+  39:   /** Default fps applied before the first projection arrives. */
+  40:   defaultFps?: number;
+  41: };
+  42: 
+  43: const DEFAULT_FPS = 10;
+  44: 
+  45: export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
+  46:   const [currentIdx, setCurrentIdx] = useState<number>(0);
+  47:   const testState = new URLSearchParams(
+  48:     window.location.search
+  49:   ).get("aiState");
+  50: 
+  51:   const validStates = [
+  52:     "idle",
+  53:     "speaking",
+  54:     "listening",
+  55:     "thinking",
+  56:     "happy",
+  57:   ];
+  58: 
+  59:   const frameCounts: Record<string, number> = {
+  60:     idle: 3,
+  61:     thinking: 4,
+  62:     happy: 3,
+  63:     speaking: 4,
+  64:     listening: 3,
+  65:   };
+  66: 
+  67:   const getStateFrames = (state: string): string[] =>
+  68:     Array.from(
+  69:       { length: frameCounts[state] ?? 1 },
+  70:       (_, index) =>
+  71:         `http://127.0.0.1:8000/static/characters/ai_girlfriend/${state}/${String(index).padStart(3, "0")}.png`
+  72:     );
+  73:   const directiveState = props.projection?.directive?.state;
+  74:   const speaking =
+  75:     props.projection?.directive?.speaking === true ||
+  76:     props.projection?.speaking === true;
+  77: 
+  78:   const knownState =
+  79:     typeof directiveState === "string" &&
+  80:     validStates.includes(directiveState)
+  81:       ? directiveState
+  82:       : "idle";
+  83: 
+  84:   const automaticState = speaking ? "speaking" : knownState;
+  85: 
+  86:   const isAiGirlfriend =
+  87:     props.projection?.frames?.some((frame) =>
+  88:       frame.includes("/ai_girlfriend/")
+  89:     ) ?? false;
+  90: 
+  91:   const testFrames =
+  92:     testState && validStates.includes(testState)
+  93:       ? getStateFrames(testState)
+  94:       : null;
+  95: 
+  96:   const automaticFrames = isAiGirlfriend
+  97:     ? getStateFrames(automaticState)
+  98:     : null;
+  99:   const frames =
+ 100:     testFrames ??
+ 101:     automaticFrames ??
+ 102:     props.projection?.frames ??
+ 103:     [];
+ 104:   const framesKey = frames.join("|");
+ 105:   const fps = props.projection?.fps ?? props.defaultFps ?? DEFAULT_FPS;
+ 106:   const loop = props.projection?.loop ?? true;
+ 107:   const lastFramesRef = useRef<string[]>([]);
+ 108: 
+ 109:   // Preload + reset index whenever the frame set changes.
+ 110:   useEffect(() => {
+ 111:     if (frames === lastFramesRef.current) return;
+ 112:     if (
+ 113:       frames.length === lastFramesRef.current.length &&
+ 114:       frames.every((f, i) => f === lastFramesRef.current[i])
+ 115:     ) {
+ 116:       return;
+ 117:     }
+ 118:     lastFramesRef.current = frames;
+ 119:     setCurrentIdx(0);
+ 120:     if (frames.length > 0) {
+ 121:       // Fire-and-forget; the renderer is happy to show partially-loaded
+ 122:       // frames since the cache is populated by the preloader.
+ 123:       preload(frames).catch(() => {
+ 124:         // already logged via the onError hook
+ 125:       });
+ 126:     }
+ 127:   }, [frames]);
+ 128: 
+ 129:   // Advance the frame index at the configured rate.
+ 130:   useEffect(() => {
+ 131:     if (frames.length <= 1 || fps <= 0) {
+ 132:       return;
+ 133:     }
+ 134:     // Natural blinking for the AI companion in idle state.
+ 135:     if (automaticState === "idle" && frames.length === 3) {
+ 136:       let cancelled = false;
+ 137:       let timer: ReturnType<typeof setTimeout>;
+ 138: 
+ 139:       const scheduleBlink = () => {
+ 140:         const delay = 3000 + Math.random() * 3000;
+ 141: 
+ 142:         timer = setTimeout(() => {
+ 143:           if (cancelled) return;
+ 144: 
+ 145:           setCurrentIdx(1);
+ 146: 
+ 147:           timer = setTimeout(() => {
+ 148:             if (cancelled) return;
+ 149: 
+ 150:             setCurrentIdx(2);
+ 151: 
+ 152:             timer = setTimeout(() => {
+ 153:               if (cancelled) return;
+ 154: 
+ 155:               setCurrentIdx(0);
+ 156:               scheduleBlink();
+ 157:             }, 100);
+ 158:           }, 80);
+ 159:         }, delay);
+ 160:       };
+ 161: 
+ 162:       setCurrentIdx(0);
+ 163:       scheduleBlink();
+ 164: 
+ 165:       return () => {
+ 166:         cancelled = true;
+ 167:         clearTimeout(timer);
+ 168:       };
+ 169:     }
+ 170: 
+ 171:     // Natural speech animation: varied mouth openings and brief pauses.
+ 172:     if (automaticState === "speaking" && frames.length === 4) {
+ 173:       let cancelled = false;
+ 174:       let timer: ReturnType<typeof setTimeout>;
+ 175:       let previousFrame = 0;
+ 176: 
+ 177:       const animateMouth = () => {
+ 178:         if (cancelled) return;
+ 179: 
+ 180:         const pause = Math.random() < 0.12;
+ 181:         let nextFrame: number;
+ 182: 
+ 183:         if (pause) {
+ 184:           nextFrame = 0;
+ 185:         } else {
+ 186:           const choices = [1, 2, 3, 2, 1, 0];
+ 187:           nextFrame = choices[Math.floor(Math.random() * choices.length)];
+ 188: 
+ 189:           if (nextFrame === previousFrame) {
+ 190:             nextFrame = (nextFrame + 1) % 4;
+ 191:           }
+ 192:         }
+ 193: 
+ 194:         previousFrame = nextFrame;
+ 195:         setCurrentIdx(nextFrame);
+ 196: 
+ 197:         const delay = pause
+ 198:           ? 130 + Math.random() * 140
+ 199:           : 85 + Math.random() * 95;
+ 200: 
+ 201:         timer = setTimeout(animateMouth, delay);
+ 202:       };
+ 203: 
+ 204:       setCurrentIdx(0);
+ 205:       animateMouth();
+ 206: 
+ 207:       return () => {
+ 208:         cancelled = true;
+ 209:         clearTimeout(timer);
+ 210:       };
+ 211:     }
+ 212: 
+ 213:     const intervalMs = Math.max(1, Math.floor(1000 / fps));
+ 214:     const handle = setInterval(() => {
+ 215:       setCurrentIdx((idx) => {
+ 216:         const next = idx + 1;
+ 217:         if (next >= frames.length) {
+ 218:           return loop ? 0 : frames.length - 1;
+ 219:         }
+ 220:         return next;
+ 221:       });
+ 222:     }, intervalMs);
+ 223:     return () => clearInterval(handle);
+ 224:   }, [framesKey, fps, loop, automaticState]);
+ 225: 
+ 226:   if (frames.length === 0) {
+ 227:     return (
+ 228:       <div
+ 229:         className={`avatar avatar--sprite2d avatar--empty ${props.className ?? ""}`}
+ 230:         data-state="idle"
+ 231:         data-frames="0"
+ 232:       />
+ 233:     );
+ 234:   }
+ 235: 
+ 236:   const src = frames[Math.min(currentIdx, frames.length - 1)];
+ 237:   return (
+ 238:     <div
+ 239:       className={`avatar avatar--sprite2d ${props.className ?? ""}`}
+ 240:       data-state={props.projection?.directive?.state ?? "idle"}
+ 241:       data-frames={String(frames.length)}
+ 242:       data-frame-idx={String(currentIdx)}
+ 243:     >
+ 244:       <img
+ 245:         className="avatar-frame"
+ 246:         src={src}
+ 247:         alt={String(props.projection?.directive?.state ?? "avatar")}
+ 248:       />
+ 249:     </div>
+ 250:   );
+ 251: }
+ 252: 
+ 253: 
+===== apps\desktop\frontend\src\ws\protocol.ts =====
+   1: /**
+   2:  * Frontend wire-protocol types.
+   3:  *
+   4:  * Mirrors `docs/contracts.md` §9 verbatim. The discriminator is the
+   5:  * `type` field. Any drift between this file and the Python projector in
+   6:  * `apps/backend/src/openmimicry_backend/projection.py` is a contract
+   7:  * change — see `contracts.md` §11 (change control).
+   8:  */
+   9: 
+  10: // ---------------------------------------------------------------------------
+  11: // Shared sub-types (mirrors of the Pydantic schemas).
+  12: // ---------------------------------------------------------------------------
+  13: 
+  14: export type State =
+  15:   | "idle"
+  16:   | "listening"
+  17:   | "thinking"
+  18:   | "speaking"
+  19:   | "happy"
+  20:   | "error";
+  21: 
+  22: export type Emotion =
+  23:   | "neutral"
+  24:   | "happy"
+  25:   | "sad"
+  26:   | "angry"
+  27:   | "confused"
+  28:   | "focused"
+  29:   | "worried";
+  30: 
+  31: export interface AvatarDirective {
+  32:   state: State;
+  33:   emotion?: Emotion;
+  34:   animation?: string | null;
+  35:   speaking?: boolean;
+  36:   text?: string | null;
+  37:   next_state?: State | null;
+  38:   duration_ms?: number | null;
+  39:   intensity?: number | null;
+  40:   gesture?: string | null;
+  41:   gaze?: string | null;
+  42:   metadata?: Record<string, unknown>;
+  43: }
+  44: 
+  45: export interface TaskHandle {
+  46:   id: string;
+  47:   runtime: string;
+  48: }
+  49: 
+  50: export type TaskStatus =
+  51:   | "queued"
+  52:   | "running"
+  53:   | "succeeded"
+  54:   | "failed"
+  55:   | "cancelled";
+  56: 
+  57: export interface TaskArtifact {
+  58:   name: string;
+  59:   mime: string;
+  60:   path?: string | null;
+  61:   inline?: string | null;
+  62: }
+  63: 
+  64: export interface TaskError {
+  65:   code: string;
+  66:   message: string;
+  67: }
+  68: 
+  69: export interface TaskUpdate {
+  70:   handle: TaskHandle;
+  71:   status: TaskStatus;
+  72:   note?: string | null;
+  73:   progress?: number | null;
+  74:   stdout?: string | null;
+  75:   artifacts?: TaskArtifact[];
+  76:   error?: TaskError | null;
+  77:   ts: string;
+  78: }
+  79: 
+  80: // ---------------------------------------------------------------------------
+  81: // Server → Frontend messages.
+  82: // ---------------------------------------------------------------------------
+  83: 
+  84: export interface AvatarDirectiveMessage {
+  85:   type: "avatar.directive";
+  86:   /** Optional runtime tag. Sprite2D sets `"sprite2d"`; future runtimes set their own. */
+  87:   runtime?: string;
+  88:   directive?: AvatarDirective;
+  89:   /** Sprite2D's projected frame set (see `runtimes/sprite2d`). */
+  90:   frames?: string[];
+  91:   fps?: number;
+  92:   loop?: boolean;
+  93:   /** Pass-through speaking flag used by per-runtime quick-toggle messages. */
+  94:   speaking?: boolean;
+  95:   text?: string | null;
+  96: }
+  97: 
+  98: export interface TranscriptPreviewMessage {
+  99:   type: "transcript.preview";
+ 100:   text: string;
+ 101:   is_final: boolean;
+ 102: }
+ 103: 
+ 104: export interface BubbleTextMessage {
+ 105:   type: "bubble.text";
+ 106:   text: string;
+ 107:   complete: boolean;
+ 108:   /** A new LLM turn started; clear any incomplete text from the prior turn. */
+ 109:   reset?: boolean;
+ 110:   presentation_mode?: "parallel" | "voice_ready" | "text_only" | "voice_only";
+ 111:   speech_expected?: boolean;
+ 112:   utterance_id?: string | null;
+ 113: }
+ 114: 
+ 115: export interface SpeechStatusMessage {
+ 116:   type: "speech.status";
+ 117:   utterance_id: string | null;
+ 118:   status: "queued" | "ready" | "started" | "finished" | "interrupted" | "failed";
+ 119: }
+ 120: 
+ 121: export interface ConversationTurnMessage {
+ 122:   type: "conversation.turn";
+ 123:   id: string;
+ 124:   role: "user" | "assistant";
+ 125:   source: "text" | "voice" | "assistant";
+ 126:   text: string;
+ 127:   ts: string;
+ 128: }
+ 129: 
+ 130: export type TurnLifecycleState =
+ 131:   | "accepted"
+ 132:   | "thinking"
+ 133:   | "presenting"
+ 134:   | "completed"
+ 135:   | "failed"
+ 136:   | "cancelled"
+ 137:   | "rejected";
+ 138: 
+ 139: export interface TurnStateMessage {
+ 140:   type: "turn.state";
+ 141:   turn_id: string;
+ 142:   sequence: number;
+ 143:   state: TurnLifecycleState;
+ 144:   source: "text" | "push_to_talk" | "continuous" | "wake" | "task";
+ 145:   reason?: string | null;
+ 146:   active_turn_id?: string | null;
+ 147:   ts: string;
+ 148: }
+ 149: 
+ 150: export interface RuntimeStateMessage {
+ 151:   type: "runtime.state";
+ 152:   instance_id: string;
+ 153:   state: "starting" | "ready" | "refreshing" | "stopping" | "stopped" | "degraded";
+ 154:   ready: boolean;
+ 155:   reason?: string | null;
+ 156:   ts?: string;
+ 157: }
+ 158: 
+ 159: export interface ComponentHealthMessage {
+ 160:   type: "component.health";
+ 161:   instance_id: string;
+ 162:   component: string;
+ 163:   family: string;
+ 164:   adapter: string;
+ 165:   state: "unknown" | "healthy" | "degraded" | "unavailable";
+ 166:   required: boolean;
+ 167:   actual_device?: string | null;
+ 168:   last_error?: string | null;
+ 169:   ts: string;
+ 170: }
+ 171: 
+ 172: export interface TaskCardMessage {
+ 173:   type: "task.card";
+ 174:   update: TaskUpdate;
+ 175: }
+ 176: 
+ 177: export type SystemNoticeLevel = "info" | "warn" | "error";
+ 178: 
+ 179: export interface SystemNoticeMessage {
+ 180:   type: "system.notice";
+ 181:   level: SystemNoticeLevel;
+ 182:   message: string;
+ 183:   /** Sprite2D uses `kind: "visibility"`; ConfigUpdated carries `diff`. */
+ 184:   kind?: string;
+ 185:   diff?: Record<string, unknown>;
+ 186:   where?: string;
+ 187:   recoverable?: boolean;
+ 188:   voice?: {
+ 189:     continuous_listening?: boolean;
+ 190:     live_wake?: boolean;
+ 191:     wake_names?: string[];
+ 192:     agent_voice?: boolean;
+ 193:     ptt_active?: boolean;
+ 194:     ptt_stage?: string;
+ 195:     listening_mode?: string;
+ 196:     stt_adapter?: string;
+ 197:     stt_runtime?: Record<string, unknown>;
+ 198:     tts_adapter?: string;
+ 199:     real_input?: boolean;
+ 200:     real_output?: boolean;
+ 201:     input_install_hint?: string | null;
+ 202:     output_install_hint?: string | null;
+ 203:   };
+ 204:   voice_result?: {
+ 205:     text: string;
+ 206:     reason: "normal" | "no_speech" | "interrupted";
+ 207:   };
+ 208:   [extra: string]: unknown;
+ 209: }
+ 210: 
+ 211: /** Server → Frontend discriminated union. */
+ 212: export type ServerMessage =
+ 213:   | AvatarDirectiveMessage
+ 214:   | TranscriptPreviewMessage
+ 215:   | BubbleTextMessage
+ 216:   | SpeechStatusMessage
+ 217:   | ConversationTurnMessage
+ 218:   | TurnStateMessage
+ 219:   | RuntimeStateMessage
+ 220:   | ComponentHealthMessage
+ 221:   | TaskCardMessage
+ 222:   | SystemNoticeMessage;
+ 223: 
+ 224: export type ServerMessageType = ServerMessage["type"];
+ 225: 
+ 226: // ---------------------------------------------------------------------------
+ 227: // Frontend → Server messages.
+ 228: // ---------------------------------------------------------------------------
+ 229: 
+ 230: export interface UserTextMessage {
+ 231:   type: "user.text";
+ 232:   text: string;
+ 233: }
+ 234: 
+ 235: export interface PttDownMessage {
+ 236:   type: "ptt.down";
+ 237: }
+ 238: 
+ 239: export interface PttUpMessage {
+ 240:   type: "ptt.up";
+===== apps\desktop\frontend\src\ws\WSProvider.tsx =====
+   1: /**
+   2:  * `WSProvider` — React context wrapping a `/ws` connection.
+   3:  *
+   4:  * Responsibilities:
+   5:  *
+   6:  * - Open a connection on mount via the injected `socketFactory`.
+   7:  * - Auto-reconnect with jittered exponential backoff via
+   8:  *   `createReconnectController`.
+   9:  * - Decode every inbound message string into a typed `ServerMessage`
+  10:  *   and expose it both as `lastMessage` and through a per-type
+  11:  *   subscription API (`subscribe("avatar.directive", handler)`).
+  12:  * - Provide `send(msg: ClientMessage)` that serialises to JSON.
+  13:  *
+  14:  * The factory is pluggable so tests can supply a `MockWebSocket`.
+  15:  */
+  16: 
+  17: import {
+  18:   createContext,
+  19:   useCallback,
+  20:   useContext,
+  21:   useEffect,
+  22:   useMemo,
+  23:   useRef,
+  24:   useState,
+  25:   type PropsWithChildren,
+  26: } from "react";
+  27: 
+  28: import { createReconnectController, type ReconnectConfig } from "./reconnect";
+  29: import {
+  30:   isServerMessage,
+  31:   type ClientMessage,
+  32:   type ServerMessage,
+  33:   type ServerMessageType,
+  34: } from "./protocol";
+  35: import type { WebSocketLike } from "./mockSocket";
+  36: 
+  37: // ---------------------------------------------------------------------------
+  38: // Context shape
+  39: // ---------------------------------------------------------------------------
+  40: 
+  41: export type ConnectionStatus = "idle" | "connecting" | "open" | "closed";
+  42: 
+  43: type Listener<T extends ServerMessageType> = (
+  44:   msg: Extract<ServerMessage, { type: T }>,
+  45: ) => void;
+  46: 
+  47: export interface WSContextValue {
+  48:   status: ConnectionStatus;
+  49:   lastMessage: ServerMessage | null;
+  50:   send(message: ClientMessage): void;
+  51:   /**
+  52:    * Subscribe to one message type. Returns the unsubscribe function.
+  53:    * Strictly typed: handler receives the narrowed variant.
+  54:    */
+  55:   subscribe<T extends ServerMessageType>(
+  56:     type: T,
+  57:     handler: Listener<T>,
+  58:   ): () => void;
+  59:   /** Force a reconnect (closes the current socket if open). Useful from tests. */
+  60:   reconnect(): void;
+  61: }
+  62: 
+  63: const noop = (): void => {};
+  64: 
+  65: const DEFAULT_CONTEXT: WSContextValue = {
+  66:   status: "idle",
+  67:   lastMessage: null,
+  68:   send: noop,
+  69:   subscribe: () => noop,
+  70:   reconnect: noop,
+  71: };
+  72: 
+  73: const WSContext = createContext<WSContextValue>(DEFAULT_CONTEXT);
+  74: 
+  75: // ---------------------------------------------------------------------------
+  76: // Provider
+  77: // ---------------------------------------------------------------------------
+  78: 
+  79: export type SocketFactory = (url: string) => WebSocketLike;
+  80: 
+  81: export interface WSProviderProps extends PropsWithChildren {
+  82:   /** WS URL. Defaults to the local backend for Tauri/Vite desktop builds. */
+  83:   url?: string;
+  84:   /** Pluggable socket factory (tests inject `mockSocketFactory().factory`). */
+  85:   socketFactory?: SocketFactory;
+  86:   /** Reconnect tunables. */
+  87:   reconnect?: ReconnectConfig;
+  88:   /** Set to false to skip the initial connect (lets tests stage state). */
+  89:   autoConnect?: boolean;
+  90: }
+  91: 
+  92: function defaultUrl(): string {
+  93:   if (typeof window === "undefined") return "ws://localhost:8000/ws";
+  94:   const configured = import.meta.env["VITE_OPENMIMICRY_WS_URL"];
+  95:   if (configured) return configured;
+  96:   if (
+  97:     "__TAURI_INTERNALS__" in window ||
+  98:     "__TAURI_IPC__" in window ||
+  99:     window.location.port === "5173"
+ 100:   ) {
+ 101:     return "ws://127.0.0.1:8000/ws";
+ 102:   }
+ 103:   const proto = window.location.protocol === "https:" ? "wss" : "ws";
+ 104:   return `${proto}://${window.location.host}/ws`;
+ 105: }
+ 106: 
+ 107: function defaultFactory(url: string): WebSocketLike {
+ 108:   // The browser global has a wider type than our shrunk-down interface,
+ 109:   // but every method we use is present on it.
+ 110:   return new WebSocket(url) as unknown as WebSocketLike;
+ 111: }
+ 112: 
+ 113: export function WSProvider(props: WSProviderProps): JSX.Element {
+ 114:   const {
+ 115:     url = defaultUrl(),
+ 116:     socketFactory = defaultFactory,
+ 117:     reconnect: reconnectCfg,
+ 118:     autoConnect = true,
+ 119:     children,
+ 120:   } = props;
+ 121: 
+ 122:   const [status, setStatus] = useState<ConnectionStatus>("idle");
+ 123:   const [lastMessage, setLastMessage] = useState<ServerMessage | null>(null);
+ 124: 
+ 125:   // The current socket is mutable across renders; the reconnect loop
+ 126:   // closes around `socketRef.current`.
+ 127:   const socketRef = useRef<WebSocketLike | null>(null);
+ 128:   const listenersRef = useRef<Map<ServerMessageType, Set<Listener<ServerMessageType>>>>(
+ 129:     new Map(),
+ 130:   );
+ 131:   const ctrlRef = useRef(createReconnectController(reconnectCfg));
+ 132:   const stoppedRef = useRef(false);
+ 133:   const connectionGenerationRef = useRef(0);
+ 134:   const forceReconnectRef = useRef<(() => void) | null>(null);
+ 135: 
+ 136:   // -----------------------------------------------------------------------
+ 137:   // Connection lifecycle
+ 138:   // -----------------------------------------------------------------------
+ 139: 
+ 140:   const connect = useCallback(() => {
+ 141:     if (stoppedRef.current) return;
+ 142:     setStatus("connecting");
+ 143:     const ws = socketFactory(url);
+ 144:     const generation = ++connectionGenerationRef.current;
+ 145:     socketRef.current = ws;
+ 146:     const isCurrent = (): boolean =>
+ 147:       socketRef.current === ws && connectionGenerationRef.current === generation;
+ 148: 
+ 149:     const onOpen = (): void => {
+ 150:       if (!isCurrent()) return;
+ 151:       ctrlRef.current.reset();
+ 152:       setStatus("open");
+ 153:     };
+ 154: 
+ 155:     const onMessage = (ev: Event): void => {
+ 156:       if (!isCurrent()) return;
+ 157:       const data = (ev as unknown as { data?: string }).data;
+ 158:       if (typeof data !== "string") return;
+ 159: 
+ 160:       let parsed: unknown;
+ 161:       try {
+ 162:         parsed = JSON.parse(data);
+ 163:       } catch {
+ 164:         return;
+ 165:       }
+ 166: 
+ 167:       if (!isServerMessage(parsed)) return;
+ 168: 
+ 169:       const msg = parsed;
+ 170:       setLastMessage(msg);
+ 171: 
+ 172:       const bucket = listenersRef.current.get(msg.type);
+ 173:       if (!bucket) return;
+ 174: 
+ 175:       for (const fn of Array.from(bucket)) {
+ 176:         try {
+ 177:           (fn as Listener<typeof msg.type>)(
+ 178:             msg as Extract<ServerMessage, { type: typeof msg.type }>,
+ 179:           );
+ 180:         } catch {
+ 181:           // listener errors are swallowed; one broken consumer doesn't
+ 182:           // poison the dispatch loop.
+ 183:         }
+ 184:       }
+ 185:     };
+ 186: 
+ 187:     const onClose = (): void => {
+ 188:       // React StrictMode mounts, cleans up, then mounts again in development.
+ 189:       // A delayed close/message from that first socket must never clear or
+ 190:       // reconnect the active second socket.
+ 191:       if (!isCurrent()) return;
+ 192:       setStatus("closed");
+ 193:       socketRef.current = null;
+ 194:       if (stoppedRef.current) return;
+ 195:       void scheduleReconnect();
+ 196:     };
+ 197: 
+ 198:     const onError = (): void => {
+ 199:       if (!isCurrent()) return;
+ 200:       // Errors land as `close` on most browsers; some send `error`
+ 201:       // separately. We rely on `close` to drive reconnect.
+ 202:     };
+ 203: 
+ 204:     ws.addEventListener("open", onOpen);
+ 205:     ws.addEventListener("message", onMessage);
+ 206:     ws.addEventListener("close", onClose);
+ 207:     ws.addEventListener("error", onError);
+ 208:     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+ 209:     void onError;
+ 210:   }, [socketFactory, url]);
+ 211: 
+ 212:   const scheduleReconnect = useCallback(async (): Promise<void> => {
+ 213:     if (stoppedRef.current) return;
+ 214:     if (!ctrlRef.current.hasAttemptsLeft()) return;
+ 215: 
+ 216:     await ctrlRef.current.wait();
+ 217: 
+ 218:     if (stoppedRef.current) return;
+ 219:     connect();
+ 220:   }, [connect]);
+ 221: 
+ 222:   const forceReconnect = useCallback((): void => {
+ 223:     const ws = socketRef.current;
+ 224:     if (ws) {
+ 225:       try {
+ 226:         ws.close();
+ 227:       } catch {
+ 228:         // ignore
+ 229:       }
+ 230:     } else {
+ 231:       void scheduleReconnect();
+ 232:     }
+ 233:   }, [scheduleReconnect]);
+ 234: 
+ 235:   forceReconnectRef.current = forceReconnect;
+ 236: 
+ 237:   // -----------------------------------------------------------------------
+ 238:   // Mount / unmount
+ 239:   // -----------------------------------------------------------------------
+ 240: 
+ 241:   useEffect(() => {
+ 242:     if (!autoConnect) return;
+ 243: 
+ 244:     stoppedRef.current = false;
+ 245:     connect();
+ 246: 
+ 247:     return () => {
+ 248:       stoppedRef.current = true;
+ 249:       connectionGenerationRef.current += 1;
+ 250: 
+ 251:       const ws = socketRef.current;
+ 252:       socketRef.current = null;
+ 253: 
+ 254:       if (ws) {
+ 255:         try {
+ 256:           ws.close();
+ 257:         } catch {
+ 258:           // ignore
+ 259:         }
+ 260:       }
+ 261:     };
+ 262:   }, [autoConnect, connect]);
+ 263: 
+ 264:   // -----------------------------------------------------------------------
+ 265:   // Public API
+ 266:   // -----------------------------------------------------------------------
+ 267: 
+ 268:   const send = useCallback((message: ClientMessage): void => {
+ 269:     const ws = socketRef.current;
+ 270:     if (!ws || ws.readyState !== 1) {
+ 271:       // Drop messages sent while the socket isn't open. The frontend is
+ 272:       // optimistic about reconnects; the user can retry once `status`
+ 273:       // returns to "open".
+ 274:       return;
+ 275:     }
+ 276: 
+ 277:     try {
+ 278:       ws.send(JSON.stringify(message));
+ 279:     } catch {
+ 280:       // ignore — `close` will fire and trigger a reconnect.
+ 281:     }
+ 282:   }, []);
+ 283: 
+ 284:   const subscribe = useCallback(
+ 285:     <T extends ServerMessageType>(type: T, handler: Listener<T>): (() => void) => {
+ 286:       const bucket =
+ 287:         listenersRef.current.get(type) ?? new Set<Listener<ServerMessageType>>();
+ 288: 
+ 289:       bucket.add(handler as unknown as Listener<ServerMessageType>);
+ 290:       listenersRef.current.set(type, bucket);
+ 291: 
+ 292:       return () => {
+ 293:         const b = listenersRef.current.get(type);
+ 294:         if (!b) return;
+ 295: 
+ 296:         b.delete(handler as unknown as Listener<ServerMessageType>);
+ 297: 
+ 298:         if (b.size === 0) listenersRef.current.delete(type);
+ 299:       };
+ 300:     },

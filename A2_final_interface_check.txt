@@ -1,0 +1,433 @@
+﻿===== packages\openmimicry-core\src\openmimicry\core\schemas\events.py =====
+
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:32:    "MovementDetected",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:33:    "ComponentHealthChanged",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:34:    "RuntimeEvent",
+> packages\openmimicry-core\src\openmimicry\core\schemas\events.py:35:    "RuntimeEventAdapter",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:36:    "RuntimeStateChanged",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:37:    "TTSChunkSpoken",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:38:    "TTSFailed",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:39:    "TTSFinished",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:40:    "TTSInterrupted",
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:282:    granted: bool = False
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:283:
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:284:
+> packages\openmimicry-core\src\openmimicry\core\schemas\events.py:285:RuntimeEvent = Annotated[
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:286:    UserTextSubmitted
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:287:    | UserSpeechStarted
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:288:    | UserSpeechFinal
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:289:    | TranscriptPreview
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:290:    | WakeDetected
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:321:to the correct subclass deterministically.
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:322:"""
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:323:
+> packages\openmimicry-core\src\openmimicry\core\schemas\events.py:324:RuntimeEventAdapter: TypeAdapter[RuntimeEvent] 
+= TypeAdapter(RuntimeEvent)
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:325:"""Pre-built Pydantic ``TypeAdapter`` for fast 
+``RuntimeEvent`` JSON parsing.
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:326:
+> packages\openmimicry-core\src\openmimicry\core\schemas\events.py:327:Use 
+``RuntimeEventAdapter.validate_python(obj)`` or
+> packages\openmimicry-core\src\openmimicry\core\schemas\events.py:328:``RuntimeEventAdapter.validate_json(raw)`` to 
+reconstruct an event with full
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:329:discriminator resolution.
+  packages\openmimicry-core\src\openmimicry\core\schemas\events.py:330:"""
+
+
+
+===== packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py =====
+
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:37:class AzureTTSAdapter:
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:38:    name = "azure"
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:39:
+> packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:40:    def __init__(self, settings: 
+AzureSpeechSettings) -> None:
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:41:        self._settings = settings
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:42:        self._session_api_key: str | None = None
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:43:        self._process: asyncio.subprocess.Process | 
+None = None
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:44:        self._ready = asyncio.Event()
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:45:        self._is_speaking = False
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:88:        text_or_stream: str | AsyncIterable[str],
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:89:        *,
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:90:        config: TTSConfig,
+> packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:91:        on_chunk=None,
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:92:    ) -> None:
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:93:        text = await _collect_text(text_or_stream)
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:94:        if not text.strip():
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:95:            return
+  packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:96:        if len(text) > 10_000:
+
+
+
+===== packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py =====
+
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:67:        task.result()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:68:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:69:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:70:class SpeechController:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:71:    """Concrete ``SpeechController``.
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:72:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:73:    Wires an STT adapter, a TTS adapter, 
+the event bus, and the voice
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:74:    config together. Tests pass any 
+STTAdapter / TTSAdapter that satisfies
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:75:    the Protocol (typically 
+``MockSTTAdapter`` / ``MockTTSAdapter``).
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:76:    """
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:77:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:78:    def __init__(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:79:        self,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:80:        *,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:81:        stt: STTAdapter,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:82:        tts: TTSAdapter,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:83:        bus: EventBus,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:84:        config: VoiceConfig | None = None,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:85:    ) -> None:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:86:        self._stt = stt
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:87:        self._tts = tts
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:88:        self._bus = bus
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:89:        self._cfg: VoiceConfig = config or 
+VoiceConfig()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:90:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:91:        self._current_tts_task: 
+asyncio.Task[None] | None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:92:        self._current_utterance_id: str | 
+None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:93:        self._speech_ready: 
+asyncio.Future[bool] | None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:102:        self._resume_listening_after_ptt: 
+tuple[str, list[str]] | None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:103:        self._started: bool = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:104:        self._stt_ready: bool = False
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:105:        self._tts_ready: bool = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:106:        self._last_accepted_wake: 
+tuple[str, float] | None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:107:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:108:    @property
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:109:    def is_speaking(self) -> bool:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:110:        return self._tts.is_speaking
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:111:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:112:    @property
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:113:    def live_listening(self) -> bool:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:114:        return self._live_listening
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:115:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:159:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:160:    @property
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:161:    def tts(self) -> TTSAdapter:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:162:        return self._tts
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:163:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:164:    @property
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:165:    def stt_ready(self) -> bool:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:166:        return self._stt_ready
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:167:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:168:    @property
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:169:    def tts_ready(self) -> bool:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:170:        return self._tts_ready
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:171:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:172:    # 
+---------------------------------------------------------------- lifecycle
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:173:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:174:    async def start(self) -> None:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:175:        if self._started:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:191:                
+_log.error("SpeechController: STT preflight failed: %s", exc)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:192:        else:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:193:            self._stt_ready = True
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:194:        prepare_tts = getattr(self._tts, 
+"prepare", None)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:195:        if callable(prepare_tts):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:196:            try:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:197:                await cast(Callable[..., 
+Awaitable[Any]], prepare_tts)(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:198:                    TTSConfig(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:199:                        
+engine=self._cfg.tts.engine,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:202:                        
+interruptible=self._cfg.tts.interruptible,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:203:                    )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:204:                )
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:205:                self._tts_ready = True
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:206:            except Exception as exc:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:207:                self._tts_ready = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:208:                _log.error(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:209:                    "SpeechController: 
+TTS preflight failed; text remains available: %s", exc
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:210:                )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:211:        else:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:212:            self._tts_ready = True
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:213:        # Barge-in watcher runs for the 
+controller's lifetime.
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:214:        self._barge_in_task = 
+asyncio.create_task(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:215:            self._barge_in_loop(), 
+name="openmimicry.voice.barge_in"
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:216:        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:217:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:228:            self._barge_in_task = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:229:        with suppress(Exception):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:230:            await self._stt.stop()
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:231:        for adapter in (self._stt, 
+self._tts):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:232:            close = getattr(adapter, 
+"close", None)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:233:            if callable(close):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:234:                with suppress(Exception):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:235:                    await 
+cast(Callable[..., Awaitable[Any]], close)()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:236:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:260:        ready = 
+asyncio.get_running_loop().create_future()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:261:        self._current_utterance_id = 
+utterance_id
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:262:        self._speech_ready = ready
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:263:        
+self._bus.publish(TTSQueued(ts=_now(), utterance_id=utterance_id))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:264:        self._current_tts_task = 
+asyncio.create_task(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:265:            
+self._speak_once(text_or_stream, utterance_id, ready, resume),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:266:            
+name=f"openmimicry.voice.say.{utterance_id[:8]}",
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:267:        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:268:        return utterance_id
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:305:        play_task: asyncio.Task[None] | 
+None = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:306:        try:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:307:            play_task = 
+asyncio.create_task(
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:308:                
+self._tts.speak(text_or_stream, config=tts_config),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:309:                
+name="openmimicry.voice.tts_adapter",
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:310:            )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:311:            # Give the adapter one loop 
+turn to replace its prior readiness
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:312:            # Event. Without this, reply 
+two could observe reply one's Event.
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:313:            await asyncio.sleep(0)
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:314:            waiter = getattr(self._tts, 
+"wait_until_ready", None)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:315:            if callable(waiter):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:316:                ready_task = 
+asyncio.create_task(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:317:                    cast(Callable[..., 
+Awaitable[Any]], waiter)(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:318:                        
+timeout_s=self._cfg.tts.readiness_timeout_s
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:319:                    ),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:333:            # Speaking is a playback 
+state, not a synthesis/queue state.  A
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:334:            # failed or stale TTS job 
+must never replace listening/thinking.
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:335:            if audio_ready and 
+self._current_tts_task is asyncio.current_task():
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:336:                self._tts_ready = True
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:337:                
+self._bus.publish(TTSReady(ts=_now(), utterance_id=utterance_id))
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:338:                
+self._bus.publish(TTSStarted(ts=_now(), utterance_id=utterance_id))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:339:            elif not audio_ready:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:340:                failure_message = 
+"Text-to-speech playback did not become ready."
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:341:            timeout_s = 
+_playback_timeout_seconds(text_or_stream)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:342:            try:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:343:                async with 
+asyncio.timeout(timeout_s):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:351:                if not play_task.done():
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:352:                    play_task.cancel()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:353:                with suppress(Exception):
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:354:                    await self._tts.stop()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:355:                with 
+suppress(asyncio.CancelledError, Exception):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:356:                    await play_task
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:357:        except asyncio.CancelledError:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:358:            cancelled = True
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:359:            if play_task is not None and 
+not play_task.done():
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:360:                play_task.cancel()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:361:            with suppress(Exception):
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:362:                await self._tts.stop()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:363:            if play_task is not None:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:364:                with 
+suppress(asyncio.CancelledError, Exception):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:365:                    await play_task
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:366:            
+self._resolve_speech_ready(ready_future, False)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:367:            raise
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:368:        except Exception as exc:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:369:            self._tts_ready = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:370:            failure_message = str(exc) or 
+type(exc).__name__
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:371:            
+_log.warning("SpeechController: tts.speak raised: %s", exc, exc_info=True)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:372:            if play_task is not None and 
+not play_task.done():
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:373:                play_task.cancel()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:374:            with suppress(Exception):
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:375:                await self._tts.stop()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:376:            if play_task is not None:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:377:                with 
+suppress(asyncio.CancelledError, Exception):
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:378:                    await play_task
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:379:            
+self._resolve_speech_ready(ready_future, False)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:380:        finally:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:381:            
+self._resolve_speech_ready(ready_future, False)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:382:            if cancelled:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:383:                
+self._bus.publish(TTSInterrupted(ts=_now(), utterance_id=utterance_id))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:384:            elif failure_message is not 
+None:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:385:                self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:386:                    TTSFailed(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:387:                        ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:388:                        
+utterance_id=utterance_id,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:389:                        
+message=failure_message,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:390:                    )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:391:                )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:392:            else:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:393:                
+self._bus.publish(TTSFinished(ts=_now(), utterance_id=utterance_id))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:394:            if self._current_utterance_id 
+== utterance_id:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:395:                
+self._current_utterance_id = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:396:                self._current_tts_task = 
+None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:397:                self._speech_ready = None
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:398:            if resume_listening is not 
+None and self._started and not self._ptt_active:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:449:                    continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:450:                if not 
+self._cfg.tts.interruptible:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:451:                    continue
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:452:                if not 
+self._tts.is_speaking:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:453:                    continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:454:                if not 
+self._stt.vad_active:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:455:                    continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:456:                # Grace period: wait, 
+then re-check.
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:457:                if grace_s:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:458:                    await 
+asyncio.sleep(grace_s)
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:459:                if not 
+self._tts.is_speaking:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:460:                    continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:461:                if not 
+self._stt.vad_active:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:462:                    continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:463:                
+_log.info("SpeechController: barge-in; interrupting TTS")
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:464:                await self.interrupt()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:488:            raise
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:489:        self._resume_listening_after_ptt 
+= resume
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:490:        self._ptt_active = True
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:491:        
+self._bus.publish(UserSpeechStarted(ts=_now()))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:492:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:493:    async def ptt_up(self) -> None:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:494:        """Close dictation STT; publish 
+the next final transcript as the result."""
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:495:        if not self._ptt_active:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:496:            return
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:518:            await self._stt.stop()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:519:        self._ptt_active = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:520:        _log.info("SpeechController: PTT 
+transcript (%s): %r", reason, text)
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:521:        self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:522:            UserSpeechFinal(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:523:                ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:524:                text=text,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:525:                raw_text=text,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:526:                reason=reason,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:544:                    if 
+transcript.is_final:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:545:                        return 
+transcript.text, "normal"
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:546:                    last_partial = 
+transcript.text
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:547:                    self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:548:                        TranscriptPreview(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:549:                            ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:550:                            
+text=transcript.text,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:551:                            
+is_final=False,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:552:                        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:766:                            
+wake_announced = False
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:767:                            raw = 
+transcript.text.strip()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:768:                            if raw:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:769:                                
+self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:770:                                    
+UserSpeechFinal(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:771:                                        
+ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:772:                                        
+text=raw,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:773:                                        
+raw_text=raw,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:774:                                        
+accepted=False,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:779:                        continue
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:780:                    wake_name, command = 
+wake_match
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:781:                    if not wake_announced:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:782:                        
+self._bus.publish(WakeDetected(ts=_now(), name=wake_name))
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:783:                        wake_announced = 
+True
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:784:                else:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:785:                    command = 
+transcript.text.strip()
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:786:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:787:                if transcript.is_final:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:799:                            "accepted" if 
+accepted else "ignored duplicate",
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:800:                            command,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:801:                        )
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:802:                        self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:803:                            
+UserSpeechFinal(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:804:                                ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:805:                                
+text=command,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:806:                                
+raw_text=raw,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:807:                                
+reason="normal",
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:813:                            )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:814:                        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:815:                    elif raw:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:816:                        self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:817:                            
+UserSpeechFinal(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:818:                                ts=_now(),
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:819:                                text=raw,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:820:                                
+raw_text=raw,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:821:                                
+accepted=False,
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:825:                        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:826:                else:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:827:                    if command:
+> packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:828:                        self._bus.publish(
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:829:                            
+TranscriptPreview(ts=_now(), text=command, is_final=False)
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:830:                        )
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:831:        except asyncio.CancelledError:
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:832:            raise
+  packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:833:        except Exception as exc:
+
+
+

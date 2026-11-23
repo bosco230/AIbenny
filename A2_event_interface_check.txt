@@ -1,0 +1,456 @@
+﻿===== packages\openmimicry-core\src\openmimicry\core\schemas\events.py =====
+   1: """Runtime event schemas — the in-process bus payloads.
+   2: 
+   3: Source of truth: ``docs/contracts.md`` §2.1 (+ §12 vision amendment).
+   4: 
+   5: ``RuntimeEvent`` is a discriminated union keyed by the ``kind`` literal so
+   6: subscribers can ``match event.kind: case "tts_done": ...`` and Pydantic can
+   7: round-trip it through JSON without ambiguity.
+   8: """
+   9: 
+  10: from __future__ import annotations
+  11: 
+  12: from datetime import datetime
+  13: from typing import Annotated, Literal
+  14: 
+  15: from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+  16: 
+  17: from .tasks import TaskHandle, TaskResult, TaskUpdate
+  18: from .vision import GestureDetection, MovementDetection
+  19: 
+  20: __all__ = [
+  21:     "AvatarCue",
+  22:     "ConfigUpdated",
+  23:     "ConsentRequired",
+  24:     "ConsentResolved",
+  25:     "ErrorEvent",
+  26:     "GestureDetected",
+  27:     "HandPoseEnded",
+  28:     "HandPoseStarted",
+  29:     "LLMReplyComplete",
+  30:     "LLMStarted",
+  31:     "LLMTokenStreamed",
+  32:     "MovementDetected",
+  33:     "ComponentHealthChanged",
+  34:     "RuntimeEvent",
+  35:     "RuntimeEventAdapter",
+  36:     "RuntimeStateChanged",
+  37:     "TTSChunkSpoken",
+  38:     "TTSFailed",
+  39:     "TTSFinished",
+  40:     "TTSInterrupted",
+  41:     "TTSQueued",
+  42:     "TTSReady",
+  43:     "TTSStarted",
+  44:     "TaskCompleted",
+  45:     "TaskSubmitted",
+  46:     "TaskUpdatedEvent",
+  47:     "TranscriptPreview",
+  48:     "TurnStateChanged",
+  49:     "UserSpeechFinal",
+  50:     "UserSpeechStarted",
+  51:     "UserTextSubmitted",
+  52:     "WakeDetected",
+  53: ]
+  54: 
+  55: 
+  56: class _Event(BaseModel):
+  57:     """Shared event base. All concrete events freeze their fields."""
+  58: 
+  59:     model_config = ConfigDict(frozen=True)
+  60: 
+  61:     ts: datetime
+  62: 
+  63: 
+  64: class UserTextSubmitted(_Event):
+  65:     kind: Literal["user_text"] = "user_text"
+  66:     text: str
+  67: 
+  68: 
+  69: class UserSpeechStarted(_Event):
+  70:     kind: Literal["speech_start"] = "speech_start"
+  71: 
+  72: 
+  73: class UserSpeechFinal(_Event):
+  74:     kind: Literal["speech_final"] = "speech_final"
+  75:     text: str
+  76:     reason: Literal["normal", "no_speech", "interrupted"] = "normal"
+  77:     # Wake mode now records every final transcript for diagnostics/history,
+  78:     # but only accepted turns are submitted to the LLM. ``text`` is the
+  79:     # command after wake-prefix stripping; ``raw_text`` is what STT heard.
+  80:     accepted: bool = True
+  81:     input_mode: Literal["push_to_talk", "continuous", "wake"] = "push_to_talk"
+  82:     raw_text: str | None = None
+  83:     rejection_reason: Literal["wake_name_missing", "duplicate", "empty"] | None = None
+  84: 
+  85: 
+  86: class TranscriptPreview(_Event):
+  87:     kind: Literal["transcript_preview"] = "transcript_preview"
+  88:     text: str
+  89:     is_final: bool = False
+  90: 
+  91: 
+  92: class WakeDetected(_Event):
+  93:     kind: Literal["wake"] = "wake"
+  94:     name: str
+  95: 
+  96: 
+  97: class TurnStateChanged(_Event):
+  98:     """Authoritative lifecycle for one admitted conversation turn.
+  99: 
+ 100:     ``sequence`` is monotonic within one backend process and ``turn_id`` is
+ 101:     globally unique.  Rejected attempts are observable but never become the
+ 102:     active turn, which lets every UI explain a busy response without allowing
+ 103:     the rejected event to change avatar state.
+ 104:     """
+ 105: 
+ 106:     kind: Literal["turn_state"] = "turn_state"
+ 107:     turn_id: str
+ 108:     sequence: int
+ 109:     state: Literal[
+ 110:         "accepted",
+ 111:         "thinking",
+ 112:         "presenting",
+ 113:         "completed",
+ 114:         "failed",
+ 115:         "cancelled",
+ 116:         "rejected",
+ 117:     ]
+ 118:     source: Literal["text", "push_to_talk", "continuous", "wake", "task", "proactive"] = "text"
+ 119:     reason: str | None = None
+ 120:     active_turn_id: str | None = None
+ 121: 
+ 122: 
+ 123: class RuntimeStateChanged(_Event):
+ 124:     """Process lifecycle projected to every desktop window."""
+ 125: 
+ 126:     kind: Literal["runtime_state"] = "runtime_state"
+ 127:     instance_id: str
+ 128:     state: Literal["starting", "ready", "refreshing", "stopping", "stopped", "degraded"]
+ 129:     ready: bool = False
+ 130:     reason: str | None = None
+ 131: 
+ 132: 
+ 133: class ComponentHealthChanged(_Event):
+ 134:     """Health snapshot for an adapter selected by the active configuration."""
+ 135: 
+ 136:     kind: Literal["component_health"] = "component_health"
+ 137:     instance_id: str
+ 138:     component: str
+ 139:     family: str
+ 140:     adapter: str
+ 141:     state: Literal["unknown", "healthy", "degraded", "unavailable"] = "unknown"
+ 142:     required: bool = False
+ 143:     actual_device: str | None = None
+ 144:     last_error: str | None = None
+ 145: 
+ 146: 
+ 147: class LLMStarted(_Event):
+ 148:     kind: Literal["llm_start"] = "llm_start"
+ 149: 
+ 150: 
+ 151: class LLMTokenStreamed(_Event):
+ 152:     kind: Literal["llm_token"] = "llm_token"
+ 153:     delta: str
+ 154: 
+ 155: 
+ 156: class LLMReplyComplete(_Event):
+ 157:     kind: Literal["llm_done"] = "llm_done"
+ 158:     full_text: str
+ 159:     presentation_mode: Literal["parallel", "voice_ready", "text_only", "voice_only"] = "parallel"
+ 160:     speech_expected: bool = False
+ 161:     speech_utterance_id: str | None = None
+ 162: 
+ 163: 
+ 164: class AvatarCue(_Event):
+ 165:     """Validated affect/action selected from a structured LLM reply.
+ 166: 
+ 167:     ``emotion`` and ``action`` remain strings at the event boundary so packs
+ 168:     and future runtimes may extend their vocabularies. The backend parser
+ 169:     allow-lists values before publishing this event.
+ 170:     """
+ 171: 
+ 172:     kind: Literal["avatar_cue"] = "avatar_cue"
+ 173:     emotion: str = "neutral"
+ 174:     action: str = "idle"
+ 175:     intensity: float = 0.6
+ 176:     duration_ms: int = 1800
+ 177: 
+ 178: 
+ 179: class TTSQueued(_Event):
+ 180:     kind: Literal["tts_queued"] = "tts_queued"
+ 181:     utterance_id: str
+ 182: 
+ 183: 
+ 184: class TTSReady(_Event):
+ 185:     kind: Literal["tts_ready"] = "tts_ready"
+ 186:     utterance_id: str
+ 187: 
+ 188: 
+ 189: class TTSStarted(_Event):
+ 190:     kind: Literal["tts_start"] = "tts_start"
+ 191:     utterance_id: str | None = None
+ 192: 
+ 193: 
+ 194: class TTSChunkSpoken(_Event):
+ 195:     kind: Literal["tts_chunk"] = "tts_chunk"
+ 196:     utterance_id: str | None = None
+ 197: 
+ 198: 
+ 199: class TTSFinished(_Event):
+ 200:     kind: Literal["tts_done"] = "tts_done"
+ 201:     utterance_id: str | None = None
+ 202: 
+ 203: 
+ 204: class TTSInterrupted(_Event):
+ 205:     kind: Literal["tts_interrupted"] = "tts_interrupted"
+ 206:     utterance_id: str | None = None
+ 207: 
+ 208: 
+ 209: class TTSFailed(_Event):
+ 210:     kind: Literal["tts_failed"] = "tts_failed"
+ 211:     utterance_id: str | None = None
+ 212:     message: str = "Text-to-speech playback did not start."
+ 213: 
+ 214: 
+ 215: class TaskSubmitted(_Event):
+ 216:     kind: Literal["task_submitted"] = "task_submitted"
+ 217:     handle: TaskHandle
+ 218:     summary: str
+ 219: 
+ 220: 
+ 221: class TaskUpdatedEvent(_Event):
+ 222:     kind: Literal["task_update"] = "task_update"
+ 223:     update: TaskUpdate
+ 224: 
+ 225: 
+===== packages\openmimicry-voice\src\openmimicry\voice\tts\fallback.py =====
+   1: """Azure-first TTS with a lazy Qwen3 fallback."""
+   2: 
+   3: from __future__ import annotations
+   4: 
+   5: import asyncio
+   6: import logging
+   7: from collections.abc import AsyncIterable
+   8: from contextlib import suppress
+   9: 
+  10: from openmimicry.core.schemas import TTSConfig
+  11: 
+  12: from .azure import AzureTTSAdapter
+  13: from .qwen3 import Qwen3TTSAdapter
+  14: from .system_command import _collect_text
+  15: 
+  16: logger = logging.getLogger(__name__)
+  17: 
+  18: 
+  19: class AzureQwen3FallbackTTSAdapter:
+  20:     name = "azure-qwen3-fallback"
+  21: 
+  22:     def __init__(
+  23:         self,
+  24:         azure: AzureTTSAdapter,
+  25:         qwen3: Qwen3TTSAdapter,
+  26:     ) -> None:
+  27:         self._azure = azure
+  28:         self._qwen3 = qwen3
+  29:         self._active = None
+  30:         self._ready = asyncio.Event()
+  31:         self._speaking = False
+  32:         self._generation = 0
+  33: 
+  34:     @property
+  35:     def is_speaking(self) -> bool:
+  36:         return self._speaking
+  37: 
+  38:     async def prepare(self, config: TTSConfig) -> None:
+  39:         # Do not preload Qwen3 while Azure is available.
+  40:         try:
+  41:             await self._azure.prepare(config)
+  42:         except Exception as exc:
+  43:             logger.warning(
+  44:                 "Azure TTS preparation failed; Qwen3 remains available as fallback: %s",
+  45:                 exc,
+  46:             )
+  47: 
+  48:     async def speak(
+  49:         self,
+  50:         text_or_stream: str | AsyncIterable[str],
+  51:         *,
+  52:         config: TTSConfig,
+  53:         on_chunk=None,
+  54:     ) -> None:
+  55:         text = await _collect_text(text_or_stream)
+  56:         if not text.strip():
+  57:             return
+  58: 
+  59:         self._generation += 1
+  60:         generation = self._generation
+  61:         self._ready.clear()
+  62: 
+  63:         self._speaking = True
+  64:         self._active = self._azure
+  65: 
+  66:         async def play(adapter) -> None:
+  67:             task = asyncio.create_task(
+  68:                 adapter.speak(text, config=config, on_chunk=on_chunk)
+  69:             )
+  70:             waiter = getattr(adapter, "wait_until_ready", None)
+  71:             ready_task = (
+  72:                 asyncio.create_task(waiter(timeout_s=180.0))
+  73:                 if callable(waiter)
+  74:                 else None
+  75:             )
+  76:             try:
+  77:                 if ready_task is not None:
+  78:                     done, _ = await asyncio.wait(
+  79:                         {task, ready_task},
+  80:                         return_when=asyncio.FIRST_COMPLETED,
+  81:                     )
+  82:                     if task in done:
+  83:                         await task
+  84:                         if generation == self._generation:
+  85:                             self._ready.set()
+  86:                     if ready_task in done and ready_task.result():
+  87:                         if generation == self._generation:
+  88:                             self._ready.set()
+  89:                 else:
+  90:                     if generation == self._generation:
+  91:                         self._ready.set()
+  92:                 await task
+  93:             finally:
+  94:                 if ready_task is not None:
+  95:                     if not ready_task.done():
+  96:                         ready_task.cancel()
+  97:                     with suppress(asyncio.CancelledError):
+  98:                         await ready_task
+  99:                 if not task.done():
+ 100:                     task.cancel()
+ 101:                     with suppress(asyncio.CancelledError):
+ 102:                         await task
+ 103: 
+ 104:         try:
+ 105:             try:
+ 106:                 await play(self._azure)
+ 107:             except asyncio.CancelledError:
+ 108:                 raise
+ 109:             except Exception as exc:
+ 110:                 logger.warning(
+ 111:                     "Azure TTS failed; switching to Qwen3: %s", exc
+ 112:                 )
+ 113:                 if generation != self._generation:
+ 114:                     return
+ 115:                 self._active = self._qwen3
+ 116:                 await self._qwen3.prepare(config)
+ 117:                 await play(self._qwen3)
+ 118:         finally:
+ 119:             if generation == self._generation:
+ 120:                 self._speaking = False
+ 121:                 self._active = None
+ 122: 
+ 123:     async def wait_until_ready(
+ 124:         self, *, timeout_s: float = 30.0
+ 125:     ) -> bool:
+===== apps\backend\src\openmimicry_backend\wiring.py =====
+ 125:     intent: IntentClassifier = detect_task_intent
+ 126:     runtime_factories: Mapping[str, Callable[[], AvatarRuntimeAdapter]] = field(
+ 127:         default_factory=dict
+ 128:     )
+ 129: 
+ 130: 
+ 131: # ---------------------------------------------------------------------------
+ 132: # Build entrypoint
+ 133: # ---------------------------------------------------------------------------
+ 134: 
+ 135: 
+ 136: async def build_runtime(
+ 137:     config: AppConfig,
+ 138:     *,
+ 139:     bus: EventBus | None = None,
+ 140:     ws_bridge: Any | None = None,
+ 141:     config_path: str | None = None,
+ 142: ) -> Wiring:
+ 143:     """Assemble every concrete adapter from ``config`` and start the runtime."""
+ 144:     bus = bus or EventBus()
+ 145:     runtime = Runtime(config=config, bus=bus, config_path=config_path)
+ 146:     await runtime.start()
+ 147: 
+ 148:     llm = _build_llm(config)
+ 149:     memory = _build_memory(config, llm)
+ 150:     stt = _build_stt(config)
+ 151:     tts = _build_tts(config)
+ 152:     speech: SpeechController = ConcreteSpeechController(
+ 153:         stt=stt, tts=tts, bus=bus, config=config.voice
+ 154:     )
+ 155: 
+ 156:     director = AvatarDirector(config=config.avatar)
+ 157:     avatar_runtime = _build_avatar_runtime(config, ws_bridge=ws_bridge)
+ 158:     orchestrator = AvatarOrchestrator(
+ 159:         director=director,
+ 160:         runtime=avatar_runtime,
+ 161:         bus=bus,
+ 162:         config=config.avatar,
+ 163:     )
+ 164: 
+ 165:     task_router = _build_task_router(config)
+ 166: 
+ 167:     runtime_names = ("sprite2d", "threejs", "live3d", "unity", "external")
+ 168:     runtime_factories: dict[str, Callable[[], AvatarRuntimeAdapter]] = {}
+ 169:     for runtime_name in runtime_names:
+ 170:         runtime_factories[runtime_name] = lambda selected=runtime_name: _build_named_avatar_runtime(
+ 171:             selected, config, ws_bridge=ws_bridge
+ 172:         )
+ 173: 
+ 174:     return Wiring(
+ 175:         runtime=runtime,
+===== apps\backend\src\openmimicry_backend\main.py =====
+ 145:     runtime_settings = {name: dict(values) for name, values in config.avatar.runtimes.items()}
+ 146:     runtime_settings[config.avatar.runtime] = {
+ 147:         **runtime_settings.get(config.avatar.runtime, {}),
+ 148:         "pack_path": str(selected_pack_path),
+ 149:     }
+ 150:     config = config.model_copy(
+ 151:         update={
+ 152:             "avatar": config.avatar.model_copy(
+ 153:                 update={"pack": selected_pack, "runtimes": runtime_settings}
+ 154:             )
+ 155:         }
+ 156:     )
+ 157: 
+ 158:     bridge = BroadcastBridge()
+ 159:     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
+ 160:     supervisor = RuntimeSupervisor(bus=wiring.bus)
+ 161:     diagnostics = install_diagnostics(config.app.data_dir)
+ 162: 
+ 163:     mode_state = {
+ 164:         "continuous_listening": config.voice.modes.continuous_listening,
+ 165:         "live_wake": config.voice.modes.live_wake,
+ 166:         "agent_voice": config.voice.modes.agent_voice,
+ 167:         "wake_names": list(wiring.speech.wake_names),
+ 168:         "wake_aliases": list(getattr(wiring.speech, "wake_aliases", [])),
+ 169:         "stt_model": getattr(wiring.speech, "stt_model", config.voice.stt.model),
+ 170:         "post_speech_silence_duration": wiring.speech.post_speech_silence_duration,
+ 171:     }
+ 172:     presentation_state = {"value": config.interaction.response_presentation}
+ 173:     proactive_idle = {"last_user_activity": time.monotonic(), "topic_index": 0}
+ 174: 
+ 175:     async def _run_ordered_turn(text: str, history, *, remember_turn: bool = True) -> str | None:
+ 176:         memory_context = await wiring.memory.context(text)
+ 177:         augmented_history = list(history)
+ 178:         if memory_context:
+ 179:             augmented_history.append(LLMMessage(role="system", content=memory_context))
+ 180:         reply = await run_chat_turn(
+ 181:             text,
+ 182:             bus=wiring.bus,
+ 183:             llm=wiring.llm,
+ 184:             tasks=wiring.tasks,
+ 185:             speech=wiring.speech if mode_state["agent_voice"] else None,
+ 186:             intent_fn=wiring.intent,
+ 187:             history=augmented_history,
+ 188:             presentation=presentation_state["value"],
+ 189:             voice_enabled=bool(mode_state["agent_voice"]),
+ 190:         )
+ 191:         if reply and config.memory.enabled and remember_turn:
+ 192:             wiring.memory.observe(
+ 193:                 text,
+ 194:                 reply,
+ 195:                 source=f"conversation:{diagnostics.session_id}",

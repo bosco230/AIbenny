@@ -1,0 +1,22 @@
+voice:
+  stt:
+    wake:
+      names:
+      - Benny
+      - Hey Benny
+      aliases:
+      - Me me
+memory:
+  bilingual_extraction: true
+  reconcile_preferences: true
+  merge_llm_bilingual: true
+  enabled: true
+  provider: local
+  database_path: ~/.openmimicry/memory/memory.sqlite3
+  endpoint: null
+  retrieval_limit: 6
+  retrieval_deadline_ms: 150
+  retention_days: 365
+  extraction_mode: llm
+  llm_backend: ollama
+  store_raw_audio: false

@@ -1,0 +1,373 @@
+﻿========== apps\backend\src\openmimicry_backend\ws.py ==========
+  55: # ---------------------------------------------------------------------------
+  56: 
+  57: 
+  58: class BroadcastBridge:
+  59:     """Process-wide WebSocket fan-out.
+  60: 
+  61:     Implements the structural ``WSBridge`` Protocol (``async def
+  62:     publish(message: dict) -> None``) without importing it from the
+  63:     avatar package â€” keeps this file free of sibling-package imports.
+  64: 
+  65:     Each connected socket is registered via :meth:`add_socket` /
+  66:     :meth:`remove_socket` and receives every ``publish`` call. A failed
+  67:     send is logged and removes the offending socket from the fan-out
+  68:     set so a dead client doesn't poison the broadcast.
+  69:     """
+  70: 
+  71:     def __init__(self) -> None:
+  72:         self._sockets: set[WebSocket] = set()
+  73:         self._send_locks: dict[WebSocket, asyncio.Lock] = {}
+  74:         self._lock = asyncio.Lock()
+  75:         self._latest_avatar: dict[str, Any] | None = None
+  76:         self._latest_bubble: dict[str, Any] | None = None
+  77:         self._latest_runtime: dict[str, Any] | None = None
+  78:         self._latest_turn: dict[str, Any] | None = None
+  79:         self._component_health: dict[str, dict[str, Any]] = {}
+  80:         self._latest_tasks: dict[str, dict[str, Any]] = {}
+  81:         self._conversation: dict[str, dict[str, Any]] = {}
+  82: 
+  83:     async def add_socket(self, ws: WebSocket) -> bool:
+  84:         async with self._lock:
+  85:             self._sockets.add(ws)
+  86:             self._send_locks.setdefault(ws, asyncio.Lock())
+  87:             replay = [message for message in (self._latest_runtime,) if message is not None]
+  88:             replay.extend(self._component_health.values())
+  89:             replay.extend(
+  90:                 message
+  91:                 for message in (self._latest_turn, self._latest_avatar, self._latest_bubble)
+  92:                 if message is not None
+  93:             )
+  94:             replay.extend(self._conversation.values())
+  95:             replay.extend(self._latest_tasks.values())
+  96:         for message in replay:
+  97:             if not await self.send(ws, message):
+  98:                 return False
+  99:         return True
+ 100: 
+ 101:     async def remove_socket(self, ws: WebSocket) -> None:
+ 102:         async with self._lock:
+ 103:             self._sockets.discard(ws)
+ 104:             self._send_locks.pop(ws, None)
+ 105: 
+ 106:     @property
+ 107:     def socket_count(self) -> int:
+ 108:         return len(self._sockets)
+ 109: 
+ 110:     async def publish(self, message: dict[str, Any]) -> None:
+ 111:         """Fan ``message`` out to every connected socket. Never raises."""
+ 112:         dead: list[WebSocket] = []
+ 113:         async with self._lock:
+ 114:             self._remember_unlocked(message)
+ 115:             sockets = list(self._sockets)
+ 116:         for ws in sockets:
+ 117:             if not await self.send(ws, message, remove_on_failure=False):
+ 118:                 dead.append(ws)
+ 119:         if dead:
+ 120:             async with self._lock:
+ 121:                 for ws in dead:
+ 122:                     self._sockets.discard(ws)
+ 123:                     self._send_locks.pop(ws, None)
+ 124: 
+ 125:     async def send(
+ 126:         self,
+ 127:         ws: WebSocket,
+ 128:         message: dict[str, Any],
+ 129:         *,
+ 130:         remove_on_failure: bool = True,
+ 131:     ) -> bool:
+ 132:         """Serialize all writes to one socket and absorb close/send races."""
+ 133: 
+ 134:         async with self._lock:
+ 135:             if ws not in self._sockets:
+ 136:                 return False
+ 137:             send_lock = self._send_locks.setdefault(ws, asyncio.Lock())
+ 138:         try:
+ 139:             async with send_lock:
+ 140:                 await ws.send_json(message)
+ 141:         except Exception as exc:
+ 142:             _log.info("WebSocket send dropped: type=%s error=%s", message.get("type"), exc)
+ 143:             if remove_on_failure:
+ 144:                 await self.remove_socket(ws)
+ 145:             return False
+ 146:         return True
+ 147: 
+ 148:     async def remember(self, message: dict[str, Any]) -> None:
+ 149:         """Retain UI state so windows opened later receive a coherent view."""
+ 150: 
+ 151:         async with self._lock:
+ 152:             self._remember_unlocked(message)
+ 153: 
+ 154:     def _remember_unlocked(self, message: dict[str, Any]) -> None:
+ 155:         if message.get("type") == "avatar.directive":
+ 156:             self._latest_avatar = dict(message)
+ 157:         elif message.get("type") == "runtime.state":
+ 158:             self._latest_runtime = dict(message)
+ 159:         elif message.get("type") == "turn.state":
+ 160:             # A rejected attempt is not the current turn and must not replace
+ 161:             # the authoritative state replayed to newly opened windows.
+ 162:             if message.get("state") != "rejected":
+ 163:                 self._latest_turn = dict(message)
+ 164:         elif message.get("type") == "component.health":
+ 165:             component = message.get("component")
+ 166:             if isinstance(component, str) and component:
+ 167:                 self._component_health[component] = dict(message)
+ 168:         elif message.get("type") == "bubble.text":
+ 169:             if message.get("reset") is True:
+ 170:                 self._latest_bubble = None
+ 171:             elif message.get("complete") is True:
+ 172:                 self._latest_bubble = dict(message)
+ 173:         elif message.get("type") == "conversation.turn":
+ 174:             turn_id = message.get("id")
+ 175:             if isinstance(turn_id, str) and turn_id:
+ 176:                 self._conversation[turn_id] = dict(message)
+ 177:                 while len(self._conversation) > 100:
+ 178:                     self._conversation.pop(next(iter(self._conversation)))
+ 179:         elif message.get("type") == "task.card":
+ 180:             update = message.get("update")
+ 181:             handle = update.get("handle") if isinstance(update, dict) else None
+ 182:             task_id = handle.get("id") if isinstance(handle, dict) else None
+ 183:             if isinstance(task_id, str) and task_id:
+ 184:                 self._latest_tasks[task_id] = dict(message)
+ 185: 
+ 186: 
+ 187: # ---------------------------------------------------------------------------
+ 188: # WS endpoint
+ 189: # ---------------------------------------------------------------------------
+ 190: 
+ 191: 
+ 192: HandleUserText = Callable[[str, TurnSource], Awaitable[TurnSubmission]]
+ 193: GetModeStatus = Callable[[], dict[str, Any]]
+ 194: CancelTask = Callable[[dict[str, Any]], Awaitable[None]]
+ 195: 
+========== apps\backend\src\openmimicry_backend\projection.py ==========
+ 220: 
+ 221: def project_messages(event: RuntimeEvent) -> list[dict[str, Any]]:
+ 222:     """Return every wire message represented by one runtime event.
+ 223: 
+ 224:     ``project`` remains the frozen one-event/one-message compatibility surface.
+ 225:     This additive wrapper supplies UI-only turn boundaries, conversation
+ 226:     history, and speech-result diagnostics without changing runtime events.
+ 227:     """
+ 228: 
+ 229:     event_id = f"{event.kind}:{event.ts.isoformat()}"
+ 230: 
+ 231:     speech_status: str | None = None
+ 232:     if isinstance(event, TTSQueued):
+ 233:         speech_status = "queued"
+ 234:     elif isinstance(event, TTSReady):
+ 235:         speech_status = "ready"
+ 236:     elif isinstance(event, TTSStarted):
+ 237:         speech_status = "started"
+ 238:     elif isinstance(event, TTSFinished):
+ 239:         speech_status = "finished"
+ 240:     elif isinstance(event, TTSInterrupted):
+ 241:         speech_status = "interrupted"
+ 242:     elif isinstance(event, TTSFailed):
+ 243:         speech_status = "failed"
+ 244:     if speech_status is not None:
+ 245:         utterance_id = getattr(event, "utterance_id", None)
+ 246:         messages = [
+ 247:             {
+ 248:                 "type": "speech.status",
+ 249:                 "utterance_id": utterance_id,
+ 250:                 "status": speech_status,
+ 251:             }
+ 252:         ]
+ 253:         compatibility = project(event)
+ 254:         if compatibility is not None:
+ 255:             messages.append(compatibility)
+ 256:         if isinstance(event, TTSFailed):
+ 257:             messages.append(
+ 258:                 {
+ 259:                     "type": "system.notice",
+ 260:                     "level": "error",
+ 261:                     "message": event.message,
+ 262:                     "where": "voice.tts",
+ 263:                     "recoverable": True,
+ 264:                 }
+ 265:             )
+ 266:         return messages
+ 267: 
+ 268:     if isinstance(event, LLMStarted):
+ 269:         return [
+ 270:             {
+ 271:                 "type": "bubble.text",
+ 272:                 "text": "",
+ 273:                 "complete": False,
+ 274:                 "reset": True,
+ 275:             }
+========== packages\openmimicry-voice\src\openmimicry\voice\tts\fallback.py ==========
+   1: """Azure-first TTS with a lazy Qwen3 fallback."""
+   2: 
+   3: from __future__ import annotations
+   4: 
+   5: import asyncio
+   6: import logging
+   7: from collections.abc import AsyncIterable
+   8: from contextlib import suppress
+   9: 
+  10: from openmimicry.core.schemas import TTSConfig
+  11: 
+  12: from .azure import AzureTTSAdapter
+  13: from .qwen3 import Qwen3TTSAdapter
+  14: from .system_command import _collect_text
+  15: 
+  16: logger = logging.getLogger(__name__)
+  17: 
+  18: 
+  19: class AzureQwen3FallbackTTSAdapter:
+  20:     name = "azure-qwen3-fallback"
+  21: 
+  22:     def __init__(
+  23:         self,
+  24:         azure: AzureTTSAdapter,
+  25:         qwen3: Qwen3TTSAdapter,
+  26:     ) -> None:
+  27:         self._azure = azure
+  28:         self._qwen3 = qwen3
+  29:         self._active = None
+  30:         self._ready = asyncio.Event()
+  31:         self._speaking = False
+  32:         self._generation = 0
+  33: 
+  34:     @property
+  35:     def is_speaking(self) -> bool:
+  36:         return self._speaking
+  37: 
+  38:     async def prepare(self, config: TTSConfig) -> None:
+  39:         # Do not preload Qwen3 while Azure is available.
+  40:         try:
+  41:             await self._azure.prepare(config)
+  42:         except Exception as exc:
+  43:             logger.warning(
+  44:                 "Azure TTS preparation failed; Qwen3 remains available as fallback: %s",
+  45:                 exc,
+  46:             )
+  47: 
+  48:     async def speak(
+  49:         self,
+  50:         text_or_stream: str | AsyncIterable[str],
+  51:         *,
+  52:         config: TTSConfig,
+  53:         on_chunk=None,
+  54:     ) -> None:
+  55:         text = await _collect_text(text_or_stream)
+  56:         if not text.strip():
+  57:             return
+  58: 
+  59:         self._generation += 1
+  60:         generation = self._generation
+  61:         self._ready.clear()
+  62: 
+  63:         self._speaking = True
+  64:         self._active = self._azure
+  65: 
+  66:         async def play(adapter) -> None:
+  67:             task = asyncio.create_task(
+  68:                 adapter.speak(text, config=config, on_chunk=on_chunk)
+  69:             )
+  70:             waiter = getattr(adapter, "wait_until_ready", None)
+  71:             ready_task = (
+  72:                 asyncio.create_task(waiter(timeout_s=180.0))
+  73:                 if callable(waiter)
+  74:                 else None
+  75:             )
+  76:             try:
+  77:                 if ready_task is not None:
+  78:                     done, _ = await asyncio.wait(
+  79:                         {task, ready_task},
+  80:                         return_when=asyncio.FIRST_COMPLETED,
+  81:                     )
+  82:                     if task in done:
+  83:                         await task
+  84:                         if generation == self._generation:
+  85:                             self._ready.set()
+  86:                     if ready_task in done and ready_task.result():
+  87:                         if generation == self._generation:
+  88:                             self._ready.set()
+  89:                 else:
+  90:                     if generation == self._generation:
+  91:                         self._ready.set()
+  92:                 await task
+  93:             finally:
+  94:                 if ready_task is not None:
+  95:                     if not ready_task.done():
+  96:                         ready_task.cancel()
+  97:                     with suppress(asyncio.CancelledError):
+  98:                         await ready_task
+  99:                 if not task.done():
+ 100:                     task.cancel()
+ 101:                     with suppress(asyncio.CancelledError):
+ 102:                         await task
+ 103: 
+ 104:         try:
+ 105:             try:
+ 106:                 await play(self._azure)
+ 107:             except asyncio.CancelledError:
+ 108:                 raise
+ 109:             except Exception as exc:
+ 110:                 logger.warning(
+ 111:                     "Azure TTS failed; switching to Qwen3: %s", exc
+ 112:                 )
+ 113:                 if generation != self._generation:
+ 114:                     return
+ 115:                 self._active = self._qwen3
+ 116:                 await self._qwen3.prepare(config)
+ 117:                 await play(self._qwen3)
+ 118:         finally:
+ 119:             if generation == self._generation:
+ 120:                 self._speaking = False
+ 121:                 self._active = None
+ 122: 
+ 123:     async def wait_until_ready(
+ 124:         self, *, timeout_s: float = 30.0
+ 125:     ) -> bool:
+ 126:         if not self._speaking and self._ready.is_set():
+ 127:             self._ready.clear()
+ 128:         try:
+ 129:             async with asyncio.timeout(timeout_s):
+ 130:                 await self._ready.wait()
+ 131:             return True
+ 132:         except TimeoutError:
+ 133:             return False
+ 134: 
+ 135:     async def stop(self) -> None:
+ 136:         self._generation += 1
+ 137:         self._speaking = False
+ 138:         adapter = self._active
+ 139:         self._active = None
+ 140:         if adapter is not None:
+ 141:             await adapter.stop()
+ 142: 
+ 143:     async def healthcheck(self) -> bool:
+ 144:         return await self._azure.healthcheck()
+ 145: 
+ 146:     async def close(self) -> None:
+ 147:         await self.stop()
+ 148:         await self._azure.close()
+ 149:         await self._qwen3.close()
+========== FRONTEND SPEECH REFERENCES ==========
+apps\desktop\frontend\src\components\AvatarHost.tsx:4: * Reads the most recent `avatar.directive` via `useAvatarDirective`, looks up
+apps\desktop\frontend\src\hooks\useAvatarDirective.ts:2: * `useAvatarDirective` â€” subscribe to `avatar.directive` messages.
+apps\desktop\frontend\src\hooks\useAvatarDirective.ts:22: return ws.subscribe("avatar.directive", (msg) => {
+apps\desktop\frontend\src\hooks\useBubbleText.ts:80: const offSpeech = ws.subscribe("speech.status", (msg) => {
+apps\desktop\frontend\src\runtimes\registry.ts:4: * Maps a runtime id (the value of `runtime` on the `avatar.directive`
+apps\desktop\frontend\src\runtimes\types.ts:5: * `avatar.directive` via `useAvatarDirective` and renders it. The
+apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx:4: * Subscribes to `avatar.directive` messages with `runtime === "sprite2d"`
+apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx:20: type: "avatar.directive";
+apps\desktop\frontend\src\runtimes\sprite2d\__tests__\Sprite2DRuntime.test.tsx:25: type: "avatar.directive",
+apps\desktop\frontend\src\runtimes\threejs\ThreeJSRuntime.tsx:4: * Receives the latest `avatar.directive` (passed as `projection` by
+apps\desktop\frontend\src\runtimes\threejs\ThreeJSRuntime.tsx:22: type: "avatar.directive";
+apps\desktop\frontend\src\runtimes\threejs\__tests__\ThreeJSRuntime.test.tsx:32: type: "avatar.directive",
+apps\desktop\frontend\src\ws\protocol.ts:85: type: "avatar.directive";
+apps\desktop\frontend\src\ws\protocol.ts:116: type: "speech.status";
+apps\desktop\frontend\src\ws\protocol.ts:277: t === "avatar.directive" ||
+apps\desktop\frontend\src\ws\protocol.ts:280: t === "speech.status" ||
+apps\desktop\frontend\src\ws\WSProvider.tsx:11: *   subscription API (`subscribe("avatar.directive", handler)`).
+apps\desktop\frontend\src\__tests__\AvatarHost.test.tsx:5: * with two `avatar.directive` messages naming different runtimes, and
+apps\desktop\frontend\src\__tests__\AvatarHost.test.tsx:64: type: "avatar.directive",
+apps\desktop\frontend\src\__tests__\AvatarHost.test.tsx:87: type: "avatar.directive",
+apps\desktop\frontend\src\__tests__\AvatarHost.test.tsx:124: type: "avatar.directive",
+apps\desktop\frontend\src\__tests__\AvatarHost.test.tsx:133: type: "avatar.directive",
+apps\desktop\frontend\src\__tests__\SpeechBubble.test.tsx:99: type: "avatar.directive",

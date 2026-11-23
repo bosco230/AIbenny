@@ -1,0 +1,126 @@
+﻿===== protocol.ts: lines 240 onwards =====
+ 240:   type: "ptt.up";
+ 241: }
+ 242: 
+ 243: export type ModeKey = "continuous_listening" | "live_wake" | "agent_voice";
+ 244: 
+ 245: export interface ModeToggleMessage {
+ 246:   type: "mode.toggle";
+ 247:   key: ModeKey;
+ 248:   value: boolean;
+ 249: }
+ 250: 
+ 251: /**
+ 252:  * Optional outbound additive (see M7 brief — §9 amendment):
+ 253:  * the frontend may request task cancellation by id.
+ 254:  */
+ 255: export interface TaskCancelMessage {
+ 256:   type: "task.cancel";
+ 257:   handle: TaskHandle;
+ 258: }
+ 259: 
+ 260: export type ClientMessage =
+ 261:   | UserTextMessage
+ 262:   | PttDownMessage
+ 263:   | PttUpMessage
+ 264:   | ModeToggleMessage
+ 265:   | TaskCancelMessage;
+ 266: 
+ 267: export type ClientMessageType = ClientMessage["type"];
+ 268: 
+ 269: // ---------------------------------------------------------------------------
+ 270: // Narrowing helpers.
+ 271: // ---------------------------------------------------------------------------
+ 272: 
+ 273: export function isServerMessage(value: unknown): value is ServerMessage {
+ 274:   if (typeof value !== "object" || value === null) return false;
+ 275:   const t = (value as { type?: unknown }).type;
+ 276:   return (
+ 277:     t === "avatar.directive" ||
+ 278:     t === "transcript.preview" ||
+ 279:     t === "bubble.text" ||
+ 280:     t === "speech.status" ||
+ 281:     t === "conversation.turn" ||
+ 282:     t === "turn.state" ||
+ 283:     t === "runtime.state" ||
+ 284:     t === "component.health" ||
+ 285:     t === "task.card" ||
+ 286:     t === "system.notice"
+ 287:   );
+ 288: }
+===== Sprite2DRuntime usage =====
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\ModeIndicator.tsx:3: * + WS connection status. Reads `useAvatarDirective` + `useWS().status`.
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\ModeIndicator.tsx:7: import { useWS } from "../hooks/useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\ModeIndicator.tsx:11: const { status } = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\TauriVoiceBridge.tsx:3: import { useWS } from "../hooks/useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\TauriVoiceBridge.tsx:6: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\TextInput.tsx:11: import { useWS } from "../hooks/useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\components\TextInput.tsx:22: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useAppearance.ts:3: import { useWS } from "./useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useAppearance.ts:81: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useAvatarDirective.ts:12: import { useWS } from "../ws/WSProvider";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useAvatarDirective.ts:16: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useBubbleText.ts:16: import { useWS } from "../ws/WSProvider";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useBubbleText.ts:51: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useBubbleText.ts:80: const offSpeech = ws.subscribe("speech.status", (msg) => {
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useRuntimeState.ts:4: import { useWS } from "./useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useRuntimeState.ts:19: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useTaskCards.ts:10: import { useWS } from "../ws/WSProvider";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useTaskCards.ts:21: const ws = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useVoiceMode.ts:3: import { useWS } from "./useWS";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useVoiceMode.ts:24: const { send, subscribe } = useWS();
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useWS.ts:1: /** Re-export of `useWS` so callers can `import { useWS } from "../hooks/useWS"`. */
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\hooks\useWS.ts:2: export { useWS } from "../ws/WSProvider";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\sprite2d\index.ts:1: export { Sprite2DRuntime } from "./Sprite2DRuntime";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\sprite2d\index.ts:2: export type { Sprite2DProjection, Sprite2DRuntimeProps } from "./Sprite2DRuntime";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx:2: * Sprite2DRuntime ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the React component that renders frame folders.
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx:34: export type Sprite2DRuntimeProps = {
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\sprite2d\Sprite2DRuntime.tsx:45: export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\registry.ts:24: import { Sprite2DRuntime } from "./sprite2d";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\registry.ts:25: import type { Sprite2DRuntimeProps } from "./sprite2d";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\registry.ts:69: sprite2d: Sprite2DRuntime as unknown as RuntimeComponent,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\runtimes\registry.ts:87: export type { Live3DRuntimeProps, Sprite2DRuntimeProps, ThreeJSRuntimeProps };
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\ws\protocol.ts:116: type: "speech.status";
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\ws\protocol.ts:280: t === "speech.status" ||
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\apps\desktop\frontend\src\ws\WSProvider.tsx:322: export function useWS(): WSContextValue {
+===== frontend package scripts =====
+{
+  "name": "@openmimicry/desktop-frontend",
+  "private": true,
+  "version": "1.6.4",
+  "type": "module",
+  "description": "OpenMimicry desktop frontend: transparent avatar, compact toolbar, WS client, and runtime registry.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:ui": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.4.0",
+    "@tauri-apps/api": "^2.1.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.4",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/coverage-v8": "2.1.4",
+    "jsdom": "^25.0.1",
+    "typescript": "5.6.3",
+    "vite": "5.4.21",
+    "vitest": "2.1.4"
+  }
+}

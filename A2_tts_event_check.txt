@@ -1,0 +1,13 @@
+﻿C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-core\src\openmimicry\core\schemas\events.py:184: class TTSReady(_Event):
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-core\src\openmimicry\core\schemas\events.py:189: class TTSStarted(_Event):
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:308: self._tts.speak(text_or_stream, config=tts_config),
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:337: self._bus.publish(TTSReady(ts=_now(), utterance_id=utterance_id))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\controllers\speech.py:338: self._bus.publish(TTSStarted(ts=_now(), utterance_id=utterance_id))
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\azure.py:91: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\chatterbox.py:176: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\elevenlabs.py:89: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\fallback.py:53: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\fallback.py:68: adapter.speak(text, config=config, on_chunk=on_chunk)
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\qwen3.py:241: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\system_command.py:46: on_chunk=None,
+C:\AI-Girlfriend\openmimicry-main\openmimicry-main\packages\openmimicry-voice\src\openmimicry\voice\tts\system_command.py:151: "$s.Speak([IO.File]::ReadAllText($env:OPENMIMICRY_TEXT_PATH)); $s.Dispose()"
