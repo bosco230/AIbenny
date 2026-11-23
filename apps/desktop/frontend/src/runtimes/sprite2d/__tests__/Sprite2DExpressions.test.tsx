@@ -62,8 +62,7 @@ afterEach(() => {
 
 describe("expressionForEmotion", () => {
   it("maps LLM emotions onto the photo folders", () => {
-    // Happy keeps the original face: the smile photos look unnatural.
-    expect(expressionForEmotion("happy")).toBe("neutral");
+    expect(expressionForEmotion("happy")).toBe("happy");
     expect(expressionForEmotion("worried")).toBe("sad");
     expect(expressionForEmotion("angry")).toBe("angry");
     expect(expressionForEmotion("surprised")).toBe("surprised");
@@ -99,9 +98,8 @@ describe("Sprite2DRuntime photo expressions", () => {
     expect(folderOf(container)).toBe("idle");
   });
 
-  it.each(["neutral", "happy"])("uses the original speaking folder for %s replies", (emotion) => {
-    const { container, rerender } = render(<Sprite2DRuntime projection={cue(emotion)} />);
-    expect(folderOf(container)).toBe("idle");
+  it("uses the plain speaking folder for neutral replies", () => {
+    const { container, rerender } = render(<Sprite2DRuntime projection={cue("neutral")} />);
     speech("started");
     rerender(
       <Sprite2DRuntime projection={photo({ state: "idle", emotion: "neutral", speaking: true })} />,
@@ -113,7 +111,7 @@ describe("Sprite2DRuntime photo expressions", () => {
     const { container, rerender } = render(
       <Sprite2DRuntime projection={photo({ state: "idle", emotion: "neutral" })} />,
     );
-    rerender(<Sprite2DRuntime projection={cue("sad")} />);
+    rerender(<Sprite2DRuntime projection={cue("happy")} />);
     expect(container.querySelector(".avatar-frame--fade-out")).not.toBeNull();
     act(() => {
       vi.advanceTimersByTime(300);
