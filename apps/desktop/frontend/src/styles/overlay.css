@@ -277,10 +277,8 @@
 }
 
 /* ------------------------------------------------------------------ 叮當
-   Cartoon motion for 叮當's two pictures only (Benny is unaffected).
-   .dd-motion  idle bob + sway, or a quicker bounce while talking
-   .dd-pop     squash-and-stretch "pop" whenever the picture changes
-   .dd-frame   squash/stretch following speech loudness (--dd-level 0-3) */
+   叮當 stays still: only his screen-face expression changes (no bobbing,
+   hopping, bouncing or squash). The wrappers just keep the layout. */
 .avatar--dingdong .dd-motion,
 .avatar--dingdong .dd-pop {
   display: flex;
@@ -288,59 +286,4 @@
   height: 100%;
   align-items: center;
   justify-content: center;
-  transform-origin: center bottom;
-}
-
-.avatar--dd-idle .dd-motion {
-  animation: dd-idle 3.2s ease-in-out infinite;
-}
-
-.avatar--dd-speaking .dd-motion {
-  animation: dd-talk 0.6s ease-in-out infinite alternate;
-}
-
-.avatar--dingdong .dd-pop {
-  animation: dd-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1) both;
-}
-
-.avatar--dingdong .dd-frame {
-  transform:
-    scale(var(--om-avatar-scale, 1))
-    scale(calc(1 + var(--dd-level, 0) * 0.011), calc(1 - var(--dd-level, 0) * 0.009));
-  transition: transform 70ms ease-out;
-}
-
-/* Gentle breathing bob, a small tilt, and a little hop near the end. */
-@keyframes dd-idle {
-  0%   { transform: translateY(0) rotate(0deg); }
-  25%  { transform: translateY(-0.6%) rotate(-0.8deg); }
-  50%  { transform: translateY(0) rotate(0deg); }
-  70%  { transform: translateY(-0.6%) rotate(0.8deg); }
-  84%  { transform: translateY(0) scale(1.015, 0.98); }
-  90%  { transform: translateY(-2%) scale(0.99, 1.015); }
-  96%  { transform: translateY(0) scale(1.01, 0.99); }
-  100% { transform: translateY(0) rotate(0deg); }
-}
-
-/* Talking: lively bounce with a slight rock. */
-@keyframes dd-talk {
-  from { transform: translateY(0) rotate(-0.6deg) scale(1.01, 0.99); }
-  to   { transform: translateY(-1.2%) rotate(0.6deg) scale(0.995, 1.01); }
-}
-
-/* Picture change: squash, overshoot, settle. */
-@keyframes dd-pop {
-  0%   { transform: scale(0.95, 1.04); }
-  55%  { transform: scale(1.03, 0.975); }
-  100% { transform: scale(1, 1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .avatar--dingdong .dd-motion,
-  .avatar--dingdong .dd-pop {
-    animation: none;
-  }
-  .avatar--dingdong .dd-frame {
-    transition: none;
-  }
 }

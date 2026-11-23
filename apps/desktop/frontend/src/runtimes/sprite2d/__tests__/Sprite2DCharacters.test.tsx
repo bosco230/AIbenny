@@ -50,18 +50,52 @@ afterEach(() => {
 });
 
 describe("character switching", () => {
-  it("shows Benny by default and 叮當's standing/laughing pictures after a switch", () => {
+  it("shows Benny by default and 叮當's screen-face robot after a switch", () => {
     const { rerender } = render(<Sprite2DRuntime projection={photo(false)} />);
     expect(src()).toContain("/ai_girlfriend/idle/");
 
     act(() => handlers.get("character.active")?.({ type: "character.active", id: "dingdong" }));
-    expect(src()).toBe("http://127.0.0.1:8000/static/characters/dingdong/idle.png");
+    expect(src()).toBe("http://127.0.0.1:8000/static/characters/dingdong/faces/neutral/000.svg");
 
     rerender(<Sprite2DRuntime projection={photo(true)} />);
-    expect(src()).toBe("http://127.0.0.1:8000/static/characters/dingdong/speaking.png");
+    expect(src()).toMatch(/dingdong\/faces\/neutral\/00[0-3]\.svg$/);
 
     act(() => handlers.get("character.active")?.({ type: "character.active", id: "benny" }));
     expect(src()).toContain("/ai_girlfriend/speaking/");
+  });
+
+  it("叮當 smiles, laughs, cries and relaxes back to neutral", () => {
+    vi.useFakeTimers();
+    const cue = (emotion: string, intensity: number): Sprite2DProjection => ({
+      ...photo(false),
+      directive: { state: "happy", emotion, intensity, metadata: { source: "llm_structured_output" } },
+    });
+    const face = () => document.querySelector(".avatar--dingdong")?.getAttribute("data-face");
+    const { rerender } = render(<Sprite2DRuntime projection={photo(false)} />);
+    act(() => handlers.get("character.active")?.({ type: "character.active", id: "dingdong" }));
+
+    rerender(<Sprite2DRuntime projection={cue("happy", 0.3)} />);
+    expect(face()).toBe("smile");
+    rerender(<Sprite2DRuntime projection={cue("happy", 0.9)} />);
+    expect(face()).toBe("happy");
+
+    // Sad reply spoken aloud: sad while talking, held after, then neutral.
+    rerender(<Sprite2DRuntime projection={cue("sad", 0.7)} />);
+    rerender(<Sprite2DRuntime projection={photo(true)} />);
+    expect(face()).toBe("sad");
+    expect(src()).toMatch(/faces\/sad\/00[0-3]\.svg$/);
+    rerender(<Sprite2DRuntime projection={photo(false)} />);
+    expect(face()).toBe("sad");
+    act(() => {
+      vi.advanceTimersByTime(4100);
+    });
+    expect(face()).toBe("neutral");
+
+    rerender(
+      <Sprite2DRuntime projection={{ ...photo(false), directive: { state: "thinking", emotion: "neutral" } }} />,
+    );
+    expect(face()).toBe("thinking");
+    vi.useRealTimers();
   });
 
   it("gives 叮當 idle/talking motion classes and leaves Benny plain", () => {
@@ -76,7 +110,8 @@ describe("character switching", () => {
     rerender(<Sprite2DRuntime projection={photo(true)} />);
     const talking = container.querySelector(".avatar--dingdong") as HTMLElement;
     expect(talking.classList.contains("avatar--dd-speaking")).toBe(true);
-    expect(talking.style.getPropertyValue("--dd-level")).toBe("0");
+    // Without RMS data the natural talking loop opens the mouth (level 0-3).
+    expect(["0", "1", "2", "3"]).toContain(talking.style.getPropertyValue("--dd-level"));
   });
 
   it("Escape posts /characters/next once; modified Escape is ignored", () => {
