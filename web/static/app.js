@@ -324,7 +324,9 @@ function showLogin() {
 async function showApp() {
   const me = await api("/api/me");
   state.voiceAvailable = Boolean(me.voice);
-  $("voice").checked = state.voiceAvailable && localStorage.getItem("voice") !== "off";
+  // 「讀出回覆」 is always ticked when the page opens (if voice is set up).
+  $("voice").checked = state.voiceAvailable;
+  localStorage.removeItem("voice");
   $("voice").disabled = !state.voiceAvailable;
   $("mic").hidden = !state.voiceAvailable;
   $("login").hidden = true;
@@ -373,7 +375,6 @@ function bind() {
   mic.addEventListener("pointerdown", (event) => { event.preventDefault(); startRecording(); });
   mic.addEventListener("pointerup", stopRecording);
   mic.addEventListener("pointerleave", stopRecording);
-  $("voice").addEventListener("change", () => localStorage.setItem("voice", $("voice").checked ? "on" : "off"));
   $("forget").addEventListener("click", async () => {
     if (!confirm(`清除 ${CHARACTERS.benny.name} 同 ${CHARACTERS.dingdong.name} 記得你嘅所有嘢？呢個動作冇得還原。`)) return;
     await api("/api/forget", { method: "POST" });
