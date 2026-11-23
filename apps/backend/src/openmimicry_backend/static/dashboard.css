@@ -94,3 +94,6 @@ code { color: #ffc69f; }
   .wake-name-form { grid-template-columns: 1fr; }
   .import-form { grid-template-columns: 1fr; }
 }
+.novel-book { display: grid; grid-template-columns: minmax(160px, 1fr) 96px auto auto; gap: 8px; align-items: center; }
+.novel-book input { min-width: 0; }
+@media (max-width: 640px) { .novel-book { grid-template-columns: 1fr 1fr; } }

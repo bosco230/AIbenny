@@ -51,6 +51,7 @@ from .routes import (
     interaction_router,
     llm_router,
     memory_router,
+    novels_router,
     mode_router,
     pack_router,
     personality_router,
@@ -293,6 +294,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     }
     presentation_state = {"value": config.interaction.response_presentation}
     proactive_idle = {"last_user_activity": time.monotonic(), "topic_index": 0}
+    # Finance-novel library: data/novels/inbox -> data/novels/novels.sqlite.
+    from openmimicry.memory.semantic import OllamaEmbedder
+
+    from .novels import NovelLibrary
+
+    _repo_root = Path(__file__).resolve().parents[4]
+    novels = NovelLibrary(
+        _repo_root / "data" / "novels" / "novels.sqlite",
+        _repo_root / "data" / "novels" / "inbox",
+        OllamaEmbedder(
+            model=config.memory.embedding_model or "bge-m3",
+            base_url=config.memory.embedding_endpoint,
+            cpu_only=config.memory.embedding_device == "cpu",
+        ),
+    )
+    app.state.novels = novels
+
     # Phase 2: finished turns waiting to be condensed into a stored summary.
     summary_state: dict = {"pending": [], "task": None}
 
@@ -328,6 +346,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         augmented_history = list(history)
         if memory_context:
             augmented_history.append(LLMMessage(role="system", content=memory_context))
+        # Finance-novel library, shared by Benny and 叮當.
+        novel_context = None
+        if remember_turn:  # proactive prompts are not user questions
+            try:
+                async with asyncio.timeout(2.0):
+                    novel_context = await novels.context(text)
+            except Exception:
+                _log.warning("NOVEL_CONTEXT_FAILED", exc_info=True)
+        if novel_context:
+            augmented_history.append(LLMMessage(role="system", content=novel_context))
         reply = await run_chat_turn(
             text,
             bus=wiring.bus,
@@ -620,6 +648,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Phase 2: index memories at startup, then summarise idle conversations.
         with suppress(Exception):
             await wiring.memory.warm_up()
+        try:
+            imported = await novels.import_inbox()
+            if imported:
+                _log.info("NOVEL_INBOX %s", [(r["file"], r["status"]) for r in imported])
+        except Exception:
+            _log.warning("NOVEL_IMPORT_AT_STARTUP_FAILED", exc_info=True)
         while True:
             await asyncio.sleep(30)
             idle = time.monotonic() - proactive_idle["last_user_activity"]
@@ -706,6 +740,7 @@ def create_app() -> FastAPI:
     app.include_router(llm_router)
     app.include_router(interaction_router)
     app.include_router(memory_router)
+    app.include_router(novels_router)
     app.include_router(personality_router)
     app.include_router(voice_clone_router)
     app.include_router(voice_profiles_router)

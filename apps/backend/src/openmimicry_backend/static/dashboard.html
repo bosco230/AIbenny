@@ -230,6 +230,18 @@
         <p id="memory-error" class="error" role="alert"></p>
       </section>
 
+      <section class="card">
+        <div class="card-heading"><h2>金融小說書庫</h2><span id="novel-count" class="badge">0 本</span></div>
+        <p class="field-hint">將你自己嘅 .txt / .epub / .pdf 放入 <code id="novel-inbox">data/novels/inbox</code>，再按「匯入新書」（後端啟動時亦會自動匯入）。Benny 同叮當共用呢個書庫；設定閱讀進度後，佢哋唔會劇透之後嘅章節。</p>
+        <div class="voice-actions">
+          <button id="novel-import" type="button">匯入新書</button>
+          <button id="novel-refresh" type="button" class="quiet">重新整理</button>
+        </div>
+        <div id="novel-results" class="field-hint"></div>
+        <div id="novel-books" class="memory-records"><p class="empty">書庫未有書。</p></div>
+        <p id="novel-error" class="error" role="alert"></p>
+      </section>
+
       <section class="card tasks-card">
         <div class="card-heading"><h2>Tasks</h2><span id="task-count" class="badge">0 active</span></div>
         <div id="tasks" class="tasks" role="list">

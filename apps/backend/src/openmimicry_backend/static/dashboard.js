@@ -149,6 +149,96 @@ function renderTasks() {
   byId("task-count").textContent = `${active} active`;
 }
 
+// Finance-novel library shared by Benny and 叮當.
+async function refreshNovels() {
+  const target = byId("novel-error");
+  target.textContent = "";
+  try {
+    const response = await fetch("/novels");
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    byId("novel-inbox").textContent = data.inbox;
+    byId("novel-count").textContent = `${data.books.length} 本`;
+    const root = byId("novel-books");
+    root.replaceChildren();
+    if (!data.books.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "書庫未有書。";
+      root.append(empty);
+      return;
+    }
+    for (const book of data.books) {
+      const row = document.createElement("div");
+      row.className = "novel-book";
+      const info = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = `《${book.title}》`;
+      const meta = document.createElement("span");
+      meta.className = "field-hint";
+      const indexed = book.indexed >= book.passages ? "已建索引" : `索引中 ${book.indexed}/${book.passages}`;
+      meta.textContent = ` ${book.author ? book.author + " · " : ""}${book.chapters} 章 · ${Math.round(book.characters / 1000)}k 字 · ${indexed}`;
+      info.append(title, meta);
+      const progress = document.createElement("input");
+      progress.type = "number";
+      progress.min = "1";
+      progress.max = String(book.chapters);
+      progress.placeholder = "讀到第幾章";
+      progress.value = book.progress ? String(book.progress) : "";
+      progress.setAttribute("aria-label", `《${book.title}》閱讀進度`);
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "儲存進度";
+      save.addEventListener("click", async () => {
+        const chapter = progress.value ? Number(progress.value) : null;
+        const update = await fetch(`/novels/${book.id}/progress`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapter }),
+        });
+        if (!update.ok) target.textContent = `${update.status}: ${await update.text()}`;
+        else await refreshNovels();
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "quiet";
+      remove.textContent = "移除";
+      remove.addEventListener("click", async () => {
+        if (!confirm(`由書庫移除《${book.title}》？（原檔案唔會刪除）`)) return;
+        const deletion = await fetch(`/novels/${book.id}`, { method: "DELETE" });
+        if (!deletion.ok) target.textContent = `${deletion.status}: ${await deletion.text()}`;
+        else await refreshNovels();
+      });
+      row.append(info, progress, save, remove);
+      root.append(row);
+    }
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
+byId("novel-refresh")?.addEventListener("click", () => { void refreshNovels(); });
+byId("novel-import")?.addEventListener("click", async () => {
+  const button = byId("novel-import");
+  const results = byId("novel-results");
+  button.disabled = true;
+  results.textContent = "匯入同建立索引中，大本書可能要一兩分鐘……";
+  try {
+    const response = await fetch("/novels/import", { method: "POST" });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    results.textContent = data.results.length
+      ? data.results.map((r) => `${r.file}：${r.status}${r.error ? "（" + r.error + "）" : ""}`).join("　")
+      : "收件夾冇新書。";
+  } catch (error) {
+    results.textContent = "";
+    byId("novel-error").textContent = String(error);
+  } finally {
+    button.disabled = false;
+    await refreshNovels();
+  }
+});
+
 // Benny ⇄ 叮當: Escape (or the header button) switches companion.
 let characterSwitching = false;
 async function switchCharacter() {
@@ -1110,4 +1200,5 @@ refreshLLMSettings();
 refreshInteractionSettings();
 refreshMemory();
 refreshPersonality();
+refreshNovels();
 connect();

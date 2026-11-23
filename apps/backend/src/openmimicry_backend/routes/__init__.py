@@ -18,6 +18,7 @@ from .health import router as health_router
 from .interaction import router as interaction_router
 from .llm import router as llm_router
 from .memory import router as memory_router
+from .novels import router as novels_router
 from .mode import router as mode_router
 from .pack import router as pack_router
 from .personality import router as personality_router
@@ -36,6 +37,7 @@ __all__ = [
     "interaction_router",
     "llm_router",
     "memory_router",
+    "novels_router",
     "mode_router",
     "pack_router",
     "personality_router",
