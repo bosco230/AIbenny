@@ -1,4 +1,4 @@
-"""金庸小說 library (shared by Benny and 叮當): list, import, progress, delete."""
+"""小說書庫 (shared by Benny and 叮當): list, import, progress, delete."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""金庸小說 (Jin Yong novel) library shared by Benny and 叮當.
+"""小說書庫 (金庸 + 三國演義 ...) shared by Benny and 叮當.
 
 Drop your own .txt / .epub / .pdf / Haodoo .updb books into ``data/novels/inbox/``. They are
 imported at backend start (and from the dashboard): split into chapters,
@@ -69,7 +69,7 @@ _CHAPTER_LINE = re.compile(
 )
 _NOVEL_HINTS = (
     "小說", "本書", "呢本", "嗰本", "書入面", "書中", "主角", "劇情", "角色", "人物",
-    "情節", "結局", "作者", "金庸", "武俠", "武功", "江湖", "招式", "門派", "掌門", "大俠", "書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書",
+    "情節", "結局", "作者", "金庸", "武俠", "武功", "江湖", "招式", "門派", "掌門", "大俠", "三國", "演義", "蜀漢", "東吳", "曹魏", "書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書",
 )
 _CHAPTER_MENTION = re.compile(r"第\s*[0-9０-９零〇○一二兩三四五六七八九十百千]+\s*[回章]")
 _LIBRARY_HINTS = ("書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書", "有咩書", "睇到邊", "讀到邊")
@@ -409,6 +409,7 @@ class NovelLibrary:
         *,
         threshold: float = 0.45,
         margin: float = 0.08,
+        terms_path: str | Path | None = None,
     ) -> None:
         self._db_path = Path(database)
         self.inbox = Path(inbox)
@@ -419,6 +420,43 @@ class NovelLibrary:
         self._matrix: Any = None
         self._meta: list[tuple[int, int, int]] = []  # (passage id, book id, chapter)
         self._index_dirty = True
+        self._terms_path = Path(terms_path) if terms_path else DEFAULT_TERMS
+        self._terms_cache: tuple[float, dict[str, str], dict[str, tuple[str, int]]] = (-1.0, {}, {})
+
+    def _terms(self) -> dict[str, str]:
+        """term -> book title from config/novel_terms.yml (reloaded when edited)."""
+
+        try:
+            mtime = self._terms_path.stat().st_mtime
+        except OSError:
+            return {}
+        if mtime != self._terms_cache[0]:
+            import yaml
+
+            mapping: dict[str, str] = {}
+            episodes: dict[str, tuple[str, int]] = {}
+            try:
+                data = yaml.safe_load(self._terms_path.read_text(encoding="utf-8")) or {}
+                for title, words in data.items():
+                    if title == "_episodes":
+                        for book, table in (words or {}).items():
+                            for word, number in (table or {}).items():
+                                episodes[str(word)] = (str(book), int(number))
+                                mapping.setdefault(str(word), str(book))
+                        continue
+                    for word in words or []:
+                        if isinstance(word, str) and len(word.strip()) >= 2:
+                            mapping[word.strip()] = str(title)
+            except Exception:
+                _log.warning("NOVEL_TERMS_INVALID %s", self._terms_path, exc_info=True)
+            self._terms_cache = (mtime, mapping, episodes)
+        return self._terms_cache[1]
+
+    def _episodes(self) -> dict[str, tuple[str, int]]:
+        """Famous episode -> (book title, 回 number), from _episodes in novel_terms.yml."""
+
+        self._terms()
+        return self._terms_cache[2]
 
     # ----------------------------------------------------------- storage
 
@@ -555,7 +593,9 @@ class NovelLibrary:
         if not books:
             return None
         notes: list[str] = []
-        mentioned = _mentioned_book(books, text)
+        # Title in the text, else a character / martial art / episode from
+        # config/novel_terms.yml ("草船借箭係咩事？" -> 《三國演義》).
+        mentioned = _mentioned_book(books, text) or _book_from_terms(books, text, self._terms())
 
         # "我睇到《X》第12回" -> remember progress (mapped to the chapter
         # actually titled 第12回, since prefaces/後記 shift indexes).
@@ -575,7 +615,31 @@ class NovelLibrary:
             or _CHAPTER_MENTION.search(text) is not None
         )
         if hinted:
-            passages = await self._search(text, mentioned, spoiler_ok=spoiler_ok)
+            passages = []
+            term = _matched_term(books, text, self._terms())
+            if mentioned is not None:
+                # 1. Famous episode -> its 回 ("空城計" -> 第九十五回), unless that
+                #    回 is past the user's reading progress.
+                chapter = await self._episode_chapter(text, mentioned, spoiler_ok)
+                if chapter is not None:
+                    passages = await self._search(
+                        text, mentioned, spoiler_ok=spoiler_ok, only_chapter=chapter, threshold=0.0, limit=2
+                    )
+            if not passages:
+                # 2. Semantic search.
+                passages = await self._search(text, mentioned, spoiler_ok=spoiler_ok)
+            if not passages and term is not None:
+                # 3. Classical text vs Cantonese question scores low: use the
+                #    earliest passages containing the word or one of its 2-char
+                #    pieces ("空城計" -> 空城).
+                book, word = term
+                limit_chapter = None if spoiler_ok else book.progress
+                for piece in [word, *_bigrams(word)]:
+                    passages = await asyncio.to_thread(
+                        self._run, _passages_containing, book.id, piece, limit_chapter, 2
+                    )
+                    if passages:
+                        break
         else:
             # No book words ("喬峰點樣死？"): only a very strong match counts.
             passages = await self._search(text, None, spoiler_ok=spoiler_ok, threshold=STRONG_MATCH)
@@ -584,7 +648,7 @@ class NovelLibrary:
 
         sections: list[str] = []
         if any(h in text for h in _LIBRARY_HINTS) or (hinted and mentioned is None and not passages):
-            sections.append("書庫入面嘅金庸小說（同另一位伴侶共用）：\n" + "\n".join(
+            sections.append("書庫入面嘅小說（同另一位伴侶共用）：\n" + "\n".join(
                 f"- 《{b.title}》{('，' + b.author) if b.author else ''}，共 {b.chapters} 回／章；"
                 + (f"使用者讀到 {b.progress_label}" if b.progress else "未記錄閱讀進度")
                 for b in books
@@ -609,12 +673,26 @@ class NovelLibrary:
         for book in guarded:
             if book.progress and not spoiler_ok:
                 sections.append(
-                    f"防劇透：使用者讀到《{book.title}》{book.progress_label}，"
-                    "唔好講之後嘅情節或者結局，除非佢自己要求。"
+                    f"防劇透：使用者讀到《{book.title}》{book.progress_label}。"
+                    "就算你本身記得之後發生咩事，都唔可以講，連暗示、「聽講」、"
+                    "「唔係好結局」都唔得；只講到呢一回為止，或者問佢想唔想劇透。"
                 )
         if not sections:
             return None
         return "\n\n".join(notes + sections)
+
+    async def _episode_chapter(self, text: str, book: Book, spoiler_ok: bool) -> int | None:
+        episodes = self._episodes()
+        for word in sorted(episodes, key=len, reverse=True):
+            title, number = episodes[word]
+            if word in text and title == book.title:
+                index = await asyncio.to_thread(self._run, _chapter_index, book.id, number)
+                if index is None:
+                    return None
+                if book.progress and not spoiler_ok and index > book.progress:
+                    return None
+                return index
+        return None
 
     async def _search(
         self,
@@ -624,6 +702,7 @@ class NovelLibrary:
         spoiler_ok: bool,
         limit: int = 3,
         threshold: float | None = None,
+        only_chapter: int | None = None,
     ) -> list[tuple[str, int, str, str]]:
         if self._embedder is None:
             return []
@@ -637,9 +716,12 @@ class NovelLibrary:
         scores = self._matrix @ vector
         progress = {b.id: b.progress for b in await self.books()}
         candidates = []
-        for index in np.argsort(-scores)[:200]:
+        ranked = np.argsort(-scores) if only_chapter is not None else np.argsort(-scores)[:200]
+        for index in ranked:
             pid, book_id, chapter = self._meta[int(index)]
             if book is not None and book_id != book.id:
+                continue
+            if only_chapter is not None and chapter != only_chapter:
                 continue
             limit_chapter = progress.get(book_id)
             if limit_chapter and not spoiler_ok and chapter > limit_chapter:
@@ -779,6 +861,58 @@ def _passage_rows(c: sqlite3.Connection, ids: list[int]) -> list[tuple[str, int,
         if row:
             out.append((row["title"], row["chapter"], row["chapter_title"] or "", row["text"]))
     return out
+
+
+DEFAULT_TERMS = Path(__file__).resolve().parents[4] / "config" / "novel_terms.yml"
+
+
+def _matched_term(books: Sequence[Book], text: str, terms: dict[str, str]) -> tuple[Book, str] | None:
+    """Book with the most lexicon words in the text, and its longest word.
+
+    "降龍十八掌係邊個教郭靖？" -> 射鵰英雄傳 (both words belong to it).
+    """
+
+    by_title = {book.title: book for book in books}
+    hits: dict[str, list[str]] = {}
+    for word, title in terms.items():
+        if word in text and title in by_title:
+            hits.setdefault(title, []).append(word)
+    if not hits:
+        return None
+    title = max(hits, key=lambda t: (len(hits[t]), max(len(w) for w in hits[t])))
+    return by_title[title], max(hits[title], key=len)
+
+
+def _book_from_terms(books: Sequence[Book], text: str, terms: dict[str, str]) -> Book | None:
+    match = _matched_term(books, text, terms)
+    return match[0] if match else None
+
+
+_CJK = re.compile(r"[㐀-鿿]+")
+
+
+def _bigrams(text: str) -> list[str]:
+    grams: list[str] = []
+    for run in _CJK.findall(text):
+        grams.extend(run[i : i + 2] for i in range(len(run) - 1))
+    return list(dict.fromkeys(grams))
+
+
+
+def _passages_containing(
+    c: sqlite3.Connection, book_id: int, word: str, max_chapter: int | None, limit: int
+) -> list[tuple[str, int, str, str]]:
+    """Literal fallback: earliest passages that contain the word (e.g. 桃園)."""
+
+    rows = c.execute(
+        """SELECT b.title, p.chapter, ch.title AS chapter_title, p.text FROM passages p
+           JOIN books b ON b.id = p.book_id
+           LEFT JOIN chapters ch ON ch.book_id = p.book_id AND ch.number = p.chapter
+           WHERE p.book_id = ? AND instr(p.text, ?) > 0 AND (? IS NULL OR p.chapter <= ?)
+           ORDER BY p.chapter, p.seq LIMIT ?""",
+        (book_id, word, max_chapter, max_chapter, limit),
+    ).fetchall()
+    return [(r["title"], r["chapter"], r["chapter_title"] or "", r["text"]) for r in rows]
 
 
 def _mentioned_book(books: Sequence[Book], text: str) -> Book | None:

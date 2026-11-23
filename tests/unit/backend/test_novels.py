@@ -228,3 +228,27 @@ def test_delete_book(tmp_path: Path) -> None:
 
     deleted, remaining = asyncio.run(scenario())
     assert deleted and remaining == []
+
+
+def test_lexicon_and_episode_routing(tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    _write_updb_volumes(inbox)
+    terms = tmp_path / "terms.yml"
+    terms.write_text(
+        "江湖夜雨: [喬大俠, 降龍掌]\n海港風雲: [阿明]\n_episodes:\n  江湖夜雨:\n    少林決戰: 2\n",
+        encoding="utf-8",
+    )
+    library = NovelLibrary(tmp_path / "n.sqlite", inbox, _WuxiaEmbedder(), threshold=0.99, terms_path=terms)
+
+    async def scenario():  # type: ignore[no-untyped-def]
+        await library.import_inbox()
+        episode = await library.context("少林決戰係點？")  # no title: lexicon + episode
+        plain = await library.context("今日好攰")
+        await library.context("我睇到江湖夜雨第一回")
+        guarded = await library.context("少林決戰係點？")  # episode is past progress
+        return episode, plain, guarded
+
+    episode, plain, guarded = asyncio.run(scenario())
+    assert episode is not None and "第二回\u3000決戰" in episode and "少林寺前" in episode
+    assert plain is None
+    assert guarded is None or "少林寺前" not in guarded
