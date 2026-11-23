@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Benny &amp; 叮當</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Passcode screen -->
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1>Benny &amp; 叮當</h1>
+      <p>請輸入通行碼開始傾偈</p>
+      <input id="passcode" type="password" autocomplete="current-password" placeholder="通行碼" required>
+      <button type="submit">入去</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- Chat screen -->
+  <main id="app" class="app" hidden>
+    <section class="stage" aria-label="角色">
+      <div class="stage-top">
+        <button id="switch" type="button" class="pill" title="切換角色（Esc）">
+          <span id="char-name">Benny</span> ⇄
+        </button>
+        <span id="status" class="status">準備好</span>
+      </div>
+      <div class="avatar-box">
+        <img id="avatar" alt="Benny" draggable="false">
+      </div>
+      <div id="bubble" class="bubble" hidden></div>
+    </section>
+
+    <section class="chat" aria-label="對話">
+      <div id="log" class="log" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <button id="mic" type="button" class="icon" title="按住講嘢" aria-label="按住講嘢">🎤</button>
+        <input id="text" type="text" maxlength="1000" placeholder="同佢講啲嘢……" autocomplete="off">
+        <button id="send" type="submit">傳送</button>
+      </form>
+      <div class="tools">
+        <label><input id="voice" type="checkbox" checked> 讀出回覆</label>
+        <button id="forget" type="button" class="quiet">忘記我</button>
+        <button id="logout" type="button" class="quiet">登出</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

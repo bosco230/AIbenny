@@ -1,0 +1,45 @@
+# Benny & 叮當 web edition on one small VPS.
+#   cd web && cp .env.example .env   (fill in the values)
+#   docker compose up -d --build
+services:
+  ollama:
+    # CPU-only embeddings (bge-m3) for memory and the novel library.
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+
+  ollama-pull:
+    # One-shot: download the embedding model on first start.
+    image: ollama/ollama:latest
+    depends_on: [ollama]
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: ["sh", "-c", "sleep 5 && ollama pull bge-m3"]
+    restart: "no"
+
+  web:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./data:/app/web/data
+    depends_on: [ollama]
+    # Not published on the host: only cloudflared reaches it.
+    expose: ["8080"]
+
+  cloudflared:
+    # Free HTTPS URL without opening any port on the VPS.
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [web]
+
+volumes:
+  ollama:
