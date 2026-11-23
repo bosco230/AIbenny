@@ -50,6 +50,8 @@ from pydantic import BaseModel
 from ..llm_response import IncrementalJSONReplyExtractor, load_personality, parse_assistant_reply
 from ..bible_search import find_reference
 from ..bible_topics import retrieve_topic
+from ..buddhist_search import build_context as build_buddhist_context
+from ..buddhist_search import find_passages as find_buddhist_passages
 
 __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
@@ -63,6 +65,7 @@ def _now() -> datetime:
 
 
 _SHARED_RULES_PATH = Path(__file__).resolve().parents[5] / "config" / "shared_rules.yml"
+_BUDDHIST_DATABASE = Path(__file__).resolve().parents[5] / "data" / "buddhist" / "buddhist.sqlite"
 
 
 def load_shared_rules(path: Path | None = None) -> str | None:
@@ -322,6 +325,17 @@ async def _run_llm_path(
     except Exception:
         # Bible retrieval must not break normal chat.
         pass
+
+    # Buddhist scripture retrieval (心經, 金剛經, 阿彌陀經, 普門品), shared by
+    # every companion. Must never break normal chat either.
+    try:
+        buddhist_context = build_buddhist_context(
+            find_buddhist_passages(_BUDDHIST_DATABASE, text)
+        )
+        if buddhist_context:
+            messages.insert(-1, LLMMessage(role="system", content=buddhist_context))
+    except Exception:
+        _log.warning("Buddhist scripture retrieval failed", exc_info=True)
 
     raw_parts: list[str] = []
     speech_queue: asyncio.Queue[object] = asyncio.Queue()
