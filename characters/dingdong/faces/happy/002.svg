@@ -1,84 +1,80 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 470" width="400" height="470"><title>叮當 · happy</title>
 <defs>
-  <radialGradient id="shell" cx="0.36" cy="0.28" r="0.8">
-    <stop offset="0" stop-color="#FFFFFF"/>
-    <stop offset="0.5" stop-color="#EEF3F7"/>
-    <stop offset="1" stop-color="#C4D2DD"/>
+  <radialGradient id="skin" cx="0.45" cy="0.38" r="0.75">
+    <stop offset="0" stop-color="#FFEBDA"/>
+    <stop offset="1" stop-color="#F4C7A4"/>
   </radialGradient>
-  <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#5BE6D8"/>
-    <stop offset="1" stop-color="#128C82"/>
+  <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#5A3E30"/>
+    <stop offset="1" stop-color="#2E1F18"/>
   </linearGradient>
-  <radialGradient id="visor" cx="0.42" cy="0.3" r="0.85">
-    <stop offset="0" stop-color="#2C4A66"/>
-    <stop offset="0.55" stop-color="#0F1C2C"/>
-    <stop offset="1" stop-color="#060B13"/>
+  <linearGradient id="hoodie" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#6A93D0"/>
+    <stop offset="1" stop-color="#3F64A0"/>
+  </linearGradient>
+  <linearGradient id="hoodieDark" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#557FBE"/>
+    <stop offset="1" stop-color="#365791"/>
+  </linearGradient>
+  <linearGradient id="jeans" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3B4C70"/>
+    <stop offset="1" stop-color="#2A3754"/>
+  </linearGradient>
+  <radialGradient id="iris" cx="0.5" cy="0.35" r="0.7">
+    <stop offset="0" stop-color="#7A5038"/>
+    <stop offset="1" stop-color="#2B1B14"/>
   </radialGradient>
   <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#FFF1B0"/>
-    <stop offset="0.45" stop-color="#F2BE45"/>
+    <stop offset="0.5" stop-color="#F2BE45"/>
     <stop offset="1" stop-color="#B57A12"/>
   </linearGradient>
-  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0" stop-color="#8A9DAD"/>
-    <stop offset="0.5" stop-color="#D6E0E8"/>
-    <stop offset="1" stop-color="#7E91A1"/>
-  </linearGradient>
   <radialGradient id="ground" cx="0.5" cy="0.5" r="0.5">
-    <stop offset="0" stop-color="#000" stop-opacity="0.28"/>
+    <stop offset="0" stop-color="#000" stop-opacity="0.25"/>
     <stop offset="1" stop-color="#000" stop-opacity="0"/>
   </radialGradient>
-  <radialGradient id="drop" cx="0.4" cy="0.35" r="0.7">
-    <stop offset="0" stop-color="#E6F6FF"/>
-    <stop offset="1" stop-color="#7CC6F2"/>
-  </radialGradient>
-  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-    <feGaussianBlur stdDeviation="3.2" result="b"/>
-    <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-  </filter>
-  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-    <feGaussianBlur stdDeviation="5"/>
+  <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur stdDeviation="4"/>
   </filter>
   <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
-    <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#1B2B38" flood-opacity="0.22"/>
+    <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#2A2030" flood-opacity="0.18"/>
   </filter>
 </defs>
-  <ellipse cx="200" cy="452" rx="96" ry="13" fill="url(#ground)"/>
-  <!-- torso -->
+  <ellipse cx="200" cy="456" rx="92" ry="12" fill="url(#ground)"/>
   <g filter="url(#shadow)">
-    <rect x="182" y="276" width="36" height="26" rx="10" fill="url(#metal)"/>
-    <path d="M138 320 Q138 294 200 294 Q262 294 262 320 L254 392 Q248 430 200 432 Q152 430 146 392 Z" fill="url(#shell)" stroke="#AFC0CD" stroke-width="2.5"/>
-    <path d="M150 394 Q200 412 250 394" fill="none" stroke="#B5C5D1" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="200" cy="350" r="24" fill="#0F1C2C"/><circle cx="200" cy="350" r="24" fill="none" stroke="url(#teal)" stroke-width="6"/><path d="M200 362 Q186 352 189 343 Q193 336 200 343 Q207 336 211 343 Q214 352 200 362 Z" fill="#FF9BB3" filter="url(#glow)"/>
+    <!-- legs + sneakers -->
+    <rect x="160" y="410" width="36" height="34" rx="10" fill="url(#jeans)"/>
+    <rect x="204" y="410" width="36" height="34" rx="10" fill="url(#jeans)"/>
+    <ellipse cx="174" cy="446" rx="28" ry="12" fill="#FFFFFF" stroke="#B8C2CC" stroke-width="2.5"/>
+    <ellipse cx="226" cy="446" rx="28" ry="12" fill="#FFFFFF" stroke="#B8C2CC" stroke-width="2.5"/>
+    <path d="M150 446 L198 446 M202 446 L250 446" stroke="#D9E0E6" stroke-width="3"/>
+    <!-- sleeves + hands -->
+    <rect x="98" y="312" width="42" height="86" rx="21" fill="url(#hoodieDark)" transform="rotate(14 119 355)"/>
+    <rect x="260" y="312" width="42" height="86" rx="21" fill="url(#hoodieDark)" transform="rotate(-14 281 355)"/>
+    <circle cx="108" cy="398" r="16" fill="url(#skin)" stroke="#E3AE88" stroke-width="2"/>
+    <circle cx="292" cy="398" r="16" fill="url(#skin)" stroke="#E3AE88" stroke-width="2"/>
+    <!-- hoodie -->
+    <path d="M124 316 Q126 290 200 290 Q274 290 276 316 L284 408 Q284 420 272 420 L128 420 Q116 420 116 408 Z" fill="url(#hoodie)"/>
+    <path d="M150 380 Q200 370 250 380 L254 410 L146 410 Z" fill="url(#hoodieDark)"/>
+    <path d="M150 380 Q200 370 250 380" fill="none" stroke="#2F4F86" stroke-width="2.5"/>
+    <path d="M148 296 Q200 336 252 296" fill="none" stroke="#86A9DC" stroke-width="12" stroke-linecap="round"/>
+    <!-- drawstrings, gold bell on the right one (the 叮) -->
+    <path d="M184 316 Q182 336 180 352" fill="none" stroke="#F2F4F7" stroke-width="4" stroke-linecap="round"/>
+    <path d="M216 316 Q218 334 220 346" fill="none" stroke="#F2F4F7" stroke-width="4" stroke-linecap="round"/>
+    <path d="M211 354 Q211 343 220 343 Q229 343 229 354 L232 358 Q220 361 208 358 Z" fill="url(#gold)" stroke="#9C6A10" stroke-width="1.5"/>
+    <circle cx="220" cy="361" r="2.5" fill="#9C6A10"/>
   </g>
-  <!-- floating hands -->
-  <g filter="url(#shadow)">
-    <ellipse cx="112" cy="356" rx="20" ry="27" fill="url(#shell)" stroke="#AFC0CD" stroke-width="2.5" transform="rotate(16 112 356)"/>
-    <path d="M100 338 Q112 330 126 336" fill="none" stroke="url(#teal)" stroke-width="6" stroke-linecap="round" transform="rotate(16 112 356)"/>
-    <ellipse cx="288" cy="356" rx="20" ry="27" fill="url(#shell)" stroke="#AFC0CD" stroke-width="2.5" transform="rotate(-16 288 356)"/>
-    <path d="M274 336 Q288 330 300 338" fill="none" stroke="url(#teal)" stroke-width="6" stroke-linecap="round" transform="rotate(-16 288 356)"/>
-  </g>
-  <!-- antenna with the golden bell (叮) -->
-  <line x1="200" y1="66" x2="200" y2="42" stroke="url(#metal)" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="200" cy="66" r="8" fill="url(#teal)"/>
-  <g filter="url(#shadow)">
-    <path d="M184 40 Q184 14 200 14 Q216 14 216 40 L222 46 Q200 51 178 46 Z" fill="url(#gold)" stroke="#9C6A10" stroke-width="2"/>
-    <ellipse cx="193" cy="26" rx="4" ry="7" fill="#FFFFFF" opacity="0.6"/>
-    <circle cx="200" cy="50" r="4.5" fill="#9C6A10"/>
-  </g>
-  <!-- ear pods -->
-  <g filter="url(#shadow)">
-    <circle cx="56" cy="182" r="27" fill="url(#teal)"/>
-    <circle cx="56" cy="182" r="15" fill="url(#shell)"/>
-    <circle cx="344" cy="182" r="27" fill="url(#teal)"/>
-    <circle cx="344" cy="182" r="15" fill="url(#shell)"/>
-  </g>
-  <!-- head shell -->
-  <g filter="url(#shadow)">
-    <rect x="60" y="64" width="280" height="226" rx="108" fill="url(#shell)" stroke="#AFC0CD" stroke-width="2.5"/>
-  </g>
-  <path d="M96 112 Q130 76 200 72" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
-  <!-- glass visor -->
-  <rect x="92" y="102" width="216" height="156" rx="72" fill="url(#visor)" stroke="#0A121C" stroke-width="4"/>
-  <path d="M120 128 Q150 110 196 110" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" opacity="0.16"/>
-  <circle cx="284" cy="132" r="5" fill="#FFFFFF" opacity="0.18"/><path d="M144 184 Q160 164 176 184" fill="none" stroke="#6FF2FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/><path d="M224 184 Q240 164 256 184" fill="none" stroke="#6FF2FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/><path d="M178 220 L222 220 Q222 244 200 246 Q178 244 178 220 Z" fill="#6FF2FF" filter="url(#glow)"/><ellipse cx="130" cy="214" rx="15" ry="8" fill="#FF9BB3" opacity="0.55" filter="url(#soft)"/><ellipse cx="270" cy="214" rx="15" ry="8" fill="#FF9BB3" opacity="0.55" filter="url(#soft)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(40 96) scale(1.0)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(360 112) scale(0.8)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(346 64) scale(0.55)"/></svg>
+  <rect x="186" y="282" width="28" height="18" rx="6" fill="#EDB993"/>
+  <!-- back hair, ears, face -->
+  <ellipse cx="200" cy="168" rx="134" ry="114" fill="url(#hair)"/>
+  <ellipse cx="78" cy="212" rx="17" ry="23" fill="url(#skin)" stroke="#E3AE88" stroke-width="2"/>
+  <ellipse cx="322" cy="212" rx="17" ry="23" fill="url(#skin)" stroke="#E3AE88" stroke-width="2"/>
+  <ellipse cx="200" cy="196" rx="124" ry="106" fill="url(#skin)"/>
+  <!-- front fringe -->
+  <path d="M80 196 Q66 92 160 62 Q240 40 302 78 Q342 104 328 194 L314 160 Q302 152 298 132
+           L276 156 Q262 140 258 118 L236 150 Q220 126 214 106 L196 146 Q178 126 172 106
+           L152 148 Q134 132 128 112 L108 158 Q96 152 92 138 Z" fill="url(#hair)"/>
+  <path d="M132 84 Q170 66 214 68" fill="none" stroke="#8A6650" stroke-width="7" stroke-linecap="round" opacity="0.7"/>
+  <path d="M188 70 Q196 58 206 50" fill="none" stroke="url(#hair)" stroke-width="10" stroke-linecap="round"/>
+  <!-- nose -->
+  <path d="M198 232 Q201 236 204 232" fill="none" stroke="#D89A78" stroke-width="3" stroke-linecap="round"/><ellipse cx="134" cy="244" rx="17" ry="9" fill="#FF9A9A" opacity="0.6" filter="url(#soft)"/><ellipse cx="266" cy="244" rx="17" ry="9" fill="#FF9A9A" opacity="0.6" filter="url(#soft)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(54 110) scale(1.0)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(350 96) scale(0.85)"/><path d="M0 -12 Q2.5 -2.5 12 0 Q2.5 2.5 0 12 Q-2.5 2.5 -12 0 Q-2.5 -2.5 0 -12 Z" fill="#FFD36A" transform="translate(334 54) scale(0.55)"/><path d="M138 164 Q158 154 178 160" fill="none" stroke="#3A2A22" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M222 160 Q242 154 262 164" fill="none" stroke="#3A2A22" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M142 216 Q160 196 178 216" fill="none" stroke="#3A2A22" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M222 216 Q240 196 258 216" fill="none" stroke="#3A2A22" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M178 250 Q200 246 222 250 Q217.6 266 200 268 Q182.4 266 178 250 Z" fill="#8B2E3B" stroke="#3A2A22" stroke-width="3" stroke-linejoin="round"/><ellipse cx="200" cy="263" rx="11.0" ry="4.8" fill="#F2897F"/><path d="M183 251 L217 251 L214 256 L186 256 Z" fill="#FFFFFF"/></svg>
