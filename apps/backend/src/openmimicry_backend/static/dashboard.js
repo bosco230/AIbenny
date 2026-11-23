@@ -149,7 +149,7 @@ function renderTasks() {
   byId("task-count").textContent = `${active} active`;
 }
 
-// Finance-novel library shared by Benny and 叮當.
+// 金庸小說 library shared by Benny and 叮當.
 async function refreshNovels() {
   const target = byId("novel-error");
   target.textContent = "";
@@ -177,13 +177,13 @@ async function refreshNovels() {
       const meta = document.createElement("span");
       meta.className = "field-hint";
       const indexed = book.indexed >= book.passages ? "已建索引" : `索引中 ${book.indexed}/${book.passages}`;
-      meta.textContent = ` ${book.author ? book.author + " · " : ""}${book.chapters} 章 · ${Math.round(book.characters / 1000)}k 字 · ${indexed}`;
+      meta.textContent = ` ${book.author ? book.author + " · " : ""}${book.chapters} 回 · ${Math.round(book.characters / 1000)}k 字 · ${indexed}`;
       info.append(title, meta);
       const progress = document.createElement("input");
       progress.type = "number";
       progress.min = "1";
       progress.max = String(book.chapters);
-      progress.placeholder = "讀到第幾章";
+      progress.placeholder = "讀到第幾回";
       progress.value = book.progress ? String(book.progress) : "";
       progress.setAttribute("aria-label", `《${book.title}》閱讀進度`);
       const save = document.createElement("button");

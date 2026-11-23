@@ -1,6 +1,6 @@
-"""Finance-novel library shared by Benny and 叮當.
+"""金庸小說 (Jin Yong novel) library shared by Benny and 叮當.
 
-Drop your own .txt / .epub / .pdf books into ``data/novels/inbox/``. They are
+Drop your own .txt / .epub / .pdf / Haodoo .updb books into ``data/novels/inbox/``. They are
 imported at backend start (and from the dashboard): split into chapters,
 cut into ~500-character passages and indexed with the same local embedding
 model as long-term memory (bge-m3 via Ollama).
@@ -21,6 +21,7 @@ import html
 import logging
 import re
 import sqlite3
+import struct
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -43,10 +44,23 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-SUPPORTED = (".txt", ".epub", ".pdf")
+SUPPORTED = (".txt", ".epub", ".pdf", ".updb")
+
+# Haodoo (好讀) books are typeset for vertical reading.
+_VERTICAL = str.maketrans(
+    {
+        "﹁": "「", "﹂": "」", "﹃": "『", "﹄": "』", "︽": "《", "︾": "》",
+        "︵": "（", "︶": "）", "︿": "〈", "﹀": "〉", "︻": "【", "︼": "】",
+        "︹": "〔", "︺": "〕", "︙": "…", "｜": "—", "︱": "—", "￤": "—", "﹒": "·",
+    }
+)
+_HAODOO_HEADER = re.compile(r"^《[^》\n]*》[^\n]*$")
+_VOLUME_SUFFIX = re.compile(r"(?:上|中|下|[0-9０-９]+|[一二三四五六七八九十]+)$")
 PASSAGE_TARGET = 500
 PASSAGE_MAX = 800
 CONTEXT_MAX_CHARS = 1500
+# Without any book words in the question, only this strong a match is used.
+STRONG_MATCH = 0.62
 
 _CHAPTER_LINE = re.compile(
     r"^\s*(?:第\s*[0-9０-９零〇一二兩三四五六七八九十百千]+\s*[章回節卷部篇集]"
@@ -55,13 +69,15 @@ _CHAPTER_LINE = re.compile(
 )
 _NOVEL_HINTS = (
     "小說", "本書", "呢本", "嗰本", "書入面", "書中", "主角", "劇情", "角色", "人物",
-    "情節", "結局", "章", "作者", "書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書",
+    "情節", "結局", "作者", "金庸", "武俠", "武功", "江湖", "招式", "門派", "掌門", "大俠", "書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書",
 )
+_CHAPTER_MENTION = re.compile(r"第\s*[0-9０-９零〇○一二兩三四五六七八九十百千]+\s*[回章]")
 _LIBRARY_HINTS = ("書庫", "書單", "推介", "推薦", "下一本", "睇咩書", "讀咩書", "有咩書", "睇到邊", "讀到邊")
 _SPOILER_OK = ("劇透都得", "唔怕劇透", "睇晒", "讀完", "睇完", "結局係", "全書")
 _PROGRESS = re.compile(
-    r"(?:睇到|讀到|看到)\s*(?:《(?P<t1>[^》]{1,40})》)?\s*(?:嘅|的)?\s*"
-    r"第\s*(?P<n>[0-9０-９零〇一二兩三四五六七八九十百千]+)\s*[章回]"
+    # "睇到《天龍八部》第二十回", and also without 《》: "睇到天龍八部第二十回".
+    r"(?:睇到|讀到|看到)\s*(?:《(?P<t1>[^》]{1,40})》|(?P<t2>[^\s，。！？、第0-9０-９]{1,20}?))?\s*(?:嘅|的)?\s*"
+    r"第\s*(?P<n>[0-9０-９零〇○一二兩三四五六七八九十百千]+)\s*[章回]"
 )
 _PROGRESS_TITLE_FIRST = re.compile(
     r"《(?P<t>[^》]{1,40})》\s*(?:我)?\s*(?:睇到|讀到|看到)\s*第\s*"
@@ -75,9 +91,12 @@ _CN_UNITS = {"十": 10, "百": 100, "千": 1000}
 def chinese_number(text: str) -> int | None:
     """Parse "12", "１２", "十二", "一百零三" -> int."""
 
-    text = text.strip().translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    text = text.strip().translate(str.maketrans("０１２３４５６７８９○", "0123456789〇"))
     if text.isdigit():
         return int(text)
+    if text and all(ch in _CN_DIGITS for ch in text):
+        # Positional form used in many 回目: 「四一」 = 41, 「二○」 = 20.
+        return int("".join(str(_CN_DIGITS[ch]) for ch in text)) or None
     total, current = 0, 0
     for char in text:
         if char in _CN_DIGITS:
@@ -227,8 +246,73 @@ def _pdf(path: Path) -> ExtractedBook:
     return ExtractedBook(title, author, _split_chapters(text))
 
 
+def _updb_records(raw: bytes) -> list[bytes]:
+    if len(raw) < 78 or raw[60:68] != b"BOOKMTIU":
+        raise ValueError("not a Haodoo .updb book (expected type BOOK, creator MTIU)")
+    count = struct.unpack(">H", raw[76:78])[0]
+    offsets = [struct.unpack(">I", raw[78 + 8 * i : 82 + 8 * i])[0] for i in range(count)]
+    offsets.append(len(raw))
+    return [raw[offsets[i] : offsets[i + 1]] for i in range(count)]
+
+
+def updb_title(path: Path) -> str:
+    """Book title from record 0 (8 ASCII spaces, then UTF-16LE up to ESC)."""
+
+    record = _updb_records(path.read_bytes())[0]
+    return record[8:].decode("utf-16-le", errors="replace").split("\x1b", 1)[0].strip()
+
+
+def _updb(path: Path) -> ExtractedBook:
+    """Haodoo (好讀) .updb: one UTF-16LE record per chapter (回)."""
+
+    records = _updb_records(path.read_bytes())
+    chapters: list[tuple[str, str]] = []
+    for record in records[1:]:
+        if record[:2] == b"\xff\xff":  # end marker
+            continue
+        text = record.decode("utf-16-le", errors="replace").translate(_VERTICAL)
+        lines = [line.strip() for line in text.replace("\r\n", "\n").split("\n")]
+        while lines and (not lines[0] or _HAODOO_HEADER.match(lines[0]) or "好讀書櫃" in lines[0]):
+            lines.pop(0)
+        if not lines:
+            continue
+        if _CHAPTER_TITLE.match(lines[0]) and len(lines[0]) <= 40:
+            title = lines.pop(0)[:60]
+            body = _clean("\n".join(lines))
+            if body:
+                chapters.append((title, body))
+        else:
+            # Continuation of a long chapter (e.g. after a ※※※ break), or a
+            # single-chapter book with no chapter heading at all.
+            body = _clean("\n".join(lines))
+            if chapters:
+                chapters[-1] = (chapters[-1][0], chapters[-1][1] + "\n\n" + body)
+            elif body:
+                chapters.append(("正文", body))
+    head = records[1][:200].decode("utf-16-le", "replace") if len(records) > 1 else ""
+    return ExtractedBook(updb_title(path), "金庸" if "金庸" in head else "", chapters)
+
+
+_CHAPTER_TITLE = re.compile(
+    r"^(?:第\s*[0-9０-９零〇○一二兩三四五六七八九十百千]+\s*[回章節卷部篇]"
+    r"|[0-9０-９零〇○一二兩三四五六七八九十百千]+[回章][　 ]"
+    r"|[0-9０-９零〇○一二兩三四五六七八九十百千]{1,4}　\S"  # 俠客行: 「一　玄鐵令」
+    r"|後記|附錄|序|序言|前言|楔子|引子|尾聲|跋)"
+)
+_TITLE_NUMBER = re.compile(r"^第?\s*([0-9０-９零〇○一二兩三四五六七八九十百千]+)\s*(?:[回章節]|　)")
+
+
+def chapter_number(title: str) -> int | None:
+    """「第四一回　…」 -> 41, 「十六回　…」 -> 16, 「一　玄鐵令」 -> 1, 「後記」 -> None."""
+
+    match = _TITLE_NUMBER.match(title.strip())
+    return chinese_number(match.group(1)) if match else None
+
+
 def extract_book(path: Path) -> ExtractedBook:
     suffix = path.suffix.casefold()
+    if suffix == ".updb":
+        return _updb(path)
     if suffix == ".epub":
         return _epub(path)
     if suffix == ".pdf":
@@ -283,6 +367,11 @@ class Book:
     progress: int | None
     indexed: int
     imported_at: str
+    progress_title: str | None = None
+
+    @property
+    def progress_label(self) -> str:
+        return self.progress_title or (f"第 {self.progress} 部分" if self.progress else "")
 
     def as_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -362,55 +451,73 @@ class NovelLibrary:
     async def set_progress(self, book_id: int, chapter: int | None) -> None:
         await asyncio.to_thread(self._run, _set_progress, book_id, chapter)
 
-    async def import_inbox(self) -> list[dict[str, Any]]:
-        """Import every new supported file in the inbox, then embed passages."""
+    async def import_inbox(self, progress: Any = None) -> list[dict[str, Any]]:
+        """Import every new book in the inbox, then embed passages.
+
+        Multi-volume books (天龍八部1-5, 書劍恩仇錄上/下 ...) are merged into
+        one book. ``progress(message)`` is called with human-readable updates.
+        """
 
         self.inbox.mkdir(parents=True, exist_ok=True)
         results: list[dict[str, Any]] = []
         async with self._lock:
-            for path in sorted(self.inbox.iterdir()):
-                if not path.is_file() or path.suffix.casefold() not in SUPPORTED:
-                    continue
+            files = [p for p in self.inbox.iterdir() if p.is_file() and p.suffix.casefold() in SUPPORTED]
+            for title, paths in _group_volumes(files):
                 try:
-                    results.append(await asyncio.to_thread(self._import_file, path))
-                except Exception as exc:  # one bad file must not stop the rest
-                    _log.warning("NOVEL_IMPORT_FAILED %s: %s", path.name, exc)
-                    results.append({"file": path.name, "status": "failed", "error": str(exc)[:300]})
-            await self._embed_missing()
+                    result = await asyncio.to_thread(self._import_book, title, paths)
+                except Exception as exc:  # one bad book must not stop the rest
+                    _log.warning("NOVEL_IMPORT_FAILED %s: %s", title, exc)
+                    result = {"file": "、".join(p.name for p in paths), "status": "failed", "error": str(exc)[:300]}
+                results.append(result)
+                if progress:
+                    progress(f"{result.get('title', title)}：{result['status']}"
+                             + (f"（{result['chapters']} 回，{result['passages']} 段）" if result.get("chapters") else ""))
+            await self._embed_missing(progress=progress)
         return results
 
-    def _import_file(self, path: Path) -> dict[str, Any]:
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    def _import_book(self, title: str, paths: list[Path]) -> dict[str, Any]:
+        digest = hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest()
+        names = "、".join(p.name for p in paths)
         existing = self._run(lambda c: c.execute("SELECT title FROM books WHERE sha256 = ?", (digest,)).fetchone())
         if existing:
-            return {"file": path.name, "status": "already imported", "title": existing["title"]}
-        book = extract_book(path)
-        if not book.chapters:
+            return {"file": names, "status": "already imported", "title": existing["title"]}
+        author = ""
+        chapters: list[tuple[str, str]] = []
+        for path in paths:
+            book = extract_book(path)
+            author = author or book.author
+            chapters.extend(book.chapters)
+            if len(paths) == 1:
+                title = book.title
+        if not chapters:
             raise ValueError("no readable text found (scanned PDF or DRM-protected file?)")
         passages = [
             (number, seq, text)
-            for number, (_, body) in enumerate(book.chapters, start=1)
+            for number, (_, body) in enumerate(chapters, start=1)
             for seq, text in enumerate(split_passages(body), start=1)
         ]
-        title = re.sub(r"[《》]", "", book.title).strip() or path.stem
-        book_id = self._run(_insert_book, title, book.author, path.name, digest, book.chapters, passages)
+        title = re.sub(r"[《》]", "", title).strip() or paths[0].stem
+        book_id = self._run(_insert_book, title, author, names[:500], digest, chapters, passages)
         self._index_dirty = True
-        _log.info("NOVEL_IMPORTED %s chapters=%d passages=%d", title, len(book.chapters), len(passages))
+        _log.info("NOVEL_IMPORTED %s volumes=%d chapters=%d passages=%d", title, len(paths), len(chapters), len(passages))
         return {
-            "file": path.name, "status": "imported", "id": book_id, "title": title,
-            "chapters": len(book.chapters), "passages": len(passages),
+            "file": names, "status": "imported", "id": book_id, "title": title,
+            "chapters": len(chapters), "passages": len(passages),
         }
 
-    async def _embed_missing(self, batch: int = 16) -> int:
+    async def _embed_missing(self, batch: int = 16, progress: Any = None) -> int:
         if self._embedder is None:
             return 0
         import numpy as np
 
+        total = await asyncio.to_thread(self._run, _count_unembedded)
         done = 0
         while True:
             rows = await asyncio.to_thread(self._run, _unembedded, batch)
             if not rows:
                 break
+            if progress and done and done % 512 < batch:
+                progress(f"建立索引：{done}/{total} 段")
             vectors = await self._embedder.embed([row["text"] for row in rows])
             payload = []
             for row, vector in zip(rows, vectors, strict=True):
@@ -450,29 +557,39 @@ class NovelLibrary:
         notes: list[str] = []
         mentioned = _mentioned_book(books, text)
 
-        # "我睇到《X》第12章" -> remember progress.
+        # "我睇到《X》第12回" -> remember progress (mapped to the chapter
+        # actually titled 第12回, since prefaces/後記 shift indexes).
         progress_update = _parse_progress(text, books, mentioned)
         if progress_update is not None:
-            book, chapter = progress_update
-            await self.set_progress(book.id, chapter)
-            notes.append(f"（已記低：使用者讀到《{book.title}》第 {chapter} 章。）")
+            book, number = progress_update
+            index = await asyncio.to_thread(self._run, _chapter_index, book.id, number)
+            await self.set_progress(book.id, min(index or number, book.chapters))
             books = await self.books()
             mentioned = next(b for b in books if b.id == book.id)
+            notes.append(f"（已記低：使用者讀到《{book.title}》{mentioned.progress_label}。）")
 
-        hinted = mentioned is not None or any(h in text for h in _NOVEL_HINTS)
-        if not hinted:
-            return None
+        spoiler_ok = any(w in text for w in _SPOILER_OK)
+        hinted = (
+            mentioned is not None
+            or any(h in text for h in _NOVEL_HINTS)
+            or _CHAPTER_MENTION.search(text) is not None
+        )
+        if hinted:
+            passages = await self._search(text, mentioned, spoiler_ok=spoiler_ok)
+        else:
+            # No book words ("喬峰點樣死？"): only a very strong match counts.
+            passages = await self._search(text, None, spoiler_ok=spoiler_ok, threshold=STRONG_MATCH)
+            if not passages:
+                return None
 
         sections: list[str] = []
-        if any(h in text for h in _LIBRARY_HINTS) or mentioned is None:
-            sections.append("書庫入面嘅金融小說（同另一位伴侶共用）：\n" + "\n".join(
-                f"- 《{b.title}》{('，' + b.author) if b.author else ''}，共 {b.chapters} 章；"
-                + (f"使用者讀到第 {b.progress} 章" if b.progress else "未記錄閱讀進度")
+        if any(h in text for h in _LIBRARY_HINTS) or (hinted and mentioned is None and not passages):
+            sections.append("書庫入面嘅金庸小說（同另一位伴侶共用）：\n" + "\n".join(
+                f"- 《{b.title}》{('，' + b.author) if b.author else ''}，共 {b.chapters} 回／章；"
+                + (f"使用者讀到 {b.progress_label}" if b.progress else "未記錄閱讀進度")
                 for b in books
             ))
 
-        spoiler_ok = any(w in text for w in _SPOILER_OK)
-        passages = await self._search(text, mentioned, spoiler_ok=spoiler_ok)
         if passages:
             lines = []
             used = 0
@@ -481,22 +598,32 @@ class NovelLibrary:
                     break
                 body = body[: CONTEXT_MAX_CHARS - used]
                 used += len(body)
-                lines.append(f"出處：《{title}》第 {chapter_no} 章 {chapter_title}\n原文：{body}")
+                where = chapter_title if chapter_title and chapter_title != "正文" else f"第 {chapter_no} 部分"
+                lines.append(f"出處：《{title}》{where}\n原文：{body}")
             sections.append(
-                "以下係書庫原文片段（只供參考，引用時要逐字、簡短，並標明書名同章數）：\n\n"
+                "以下係書庫原文片段（只供參考，引用時要逐字、簡短，並標明書名同回目）：\n\n"
                 + "\n\n".join(lines)
             )
-        if mentioned is not None and mentioned.progress and not spoiler_ok:
-            sections.append(
-                f"防劇透：使用者讀到《{mentioned.title}》第 {mentioned.progress} 章，"
-                "唔好講之後章節嘅情節或者結局，除非佢自己要求。"
-            )
+        guarded = [mentioned] if mentioned is not None else []
+        guarded += [b for b in books if b.progress and any(p[0] == b.title for p in passages) and b not in guarded]
+        for book in guarded:
+            if book.progress and not spoiler_ok:
+                sections.append(
+                    f"防劇透：使用者讀到《{book.title}》{book.progress_label}，"
+                    "唔好講之後嘅情節或者結局，除非佢自己要求。"
+                )
         if not sections:
             return None
         return "\n\n".join(notes + sections)
 
     async def _search(
-        self, question: str, book: Book | None, *, spoiler_ok: bool, limit: int = 3
+        self,
+        question: str,
+        book: Book | None,
+        *,
+        spoiler_ok: bool,
+        limit: int = 3,
+        threshold: float | None = None,
     ) -> list[tuple[str, int, str, str]]:
         if self._embedder is None:
             return []
@@ -520,9 +647,10 @@ class NovelLibrary:
             candidates.append((float(scores[int(index)]), pid))
             if len(candidates) >= limit:
                 break
-        if not candidates or candidates[0][0] < self._threshold:
+        minimum = self._threshold if threshold is None else threshold
+        if not candidates or candidates[0][0] < minimum:
             return []
-        floor = max(self._threshold, candidates[0][0] - self._margin)
+        floor = max(minimum, candidates[0][0] - self._margin)
         ids = [pid for score, pid in candidates if score >= floor]
         return await asyncio.to_thread(self._run, _passage_rows, ids)
 
@@ -537,13 +665,14 @@ def _now() -> str:
 def _list_books(c: sqlite3.Connection) -> list[Book]:
     rows = c.execute(
         """SELECT b.*, p.chapter AS progress,
+                  (SELECT title FROM chapters ch WHERE ch.book_id = b.id AND ch.number = p.chapter) AS progress_title,
                   (SELECT COUNT(*) FROM passages x WHERE x.book_id = b.id) AS passages,
                   (SELECT COUNT(*) FROM passages x WHERE x.book_id = b.id AND x.vector IS NOT NULL) AS indexed
            FROM books b LEFT JOIN progress p ON p.book_id = b.id ORDER BY b.title"""
     ).fetchall()
     return [
         Book(r["id"], r["title"], r["author"], r["file_name"], r["chapters"], r["passages"],
-             r["characters"], r["progress"], r["indexed"], r["imported_at"])
+             r["characters"], r["progress"], r["indexed"], r["imported_at"], r["progress_title"])
         for r in rows
     ]
 
@@ -586,6 +715,43 @@ def _set_progress(c: sqlite3.Connection, book_id: int, chapter: int | None) -> N
             "INSERT OR REPLACE INTO progress(book_id, chapter, updated_at) VALUES (?, ?, ?)",
             (book_id, chapter, _now()),
         )
+
+
+def _volume_order(suffix: str) -> int:
+    return {"上": 1, "中": 2, "下": 3}.get(suffix) or chinese_number(suffix) or 0
+
+
+def _group_volumes(files: Sequence[Path]) -> list[tuple[str, list[Path]]]:
+    """Group 天龍八部一..五 / 書劍恩仇錄上,下 into one book, volumes in order."""
+
+    groups: dict[str, list[tuple[int, Path]]] = {}
+    for path in files:
+        try:
+            title = updb_title(path) if path.suffix.casefold() == ".updb" else path.stem
+        except Exception:
+            title = path.stem
+        title = re.sub(r"[《》\s]", "", title) or path.stem
+        match = _VOLUME_SUFFIX.search(title)
+        base = title[: match.start()] if match and match.start() > 0 else title
+        order = _volume_order(match.group(0)) if match and match.start() > 0 else 0
+        groups.setdefault(base, []).append((order, path))
+    return [
+        (base, [p for _, p in sorted(items, key=lambda item: (item[0], item[1].name))])
+        for base, items in sorted(groups.items())
+    ]
+
+
+def _count_unembedded(c: sqlite3.Connection) -> int:
+    return int(c.execute("SELECT COUNT(*) FROM passages WHERE vector IS NULL").fetchone()[0])
+
+
+def _chapter_index(c: sqlite3.Connection, book_id: int, number: int) -> int | None:
+    """Index of the chapter titled 第{number}回/章 (prefaces and 後記 shift indexes)."""
+
+    for row in c.execute("SELECT number, title FROM chapters WHERE book_id = ? ORDER BY number", (book_id,)):
+        if chapter_number(row["title"]) == number:
+            return int(row["number"])
+    return None
 
 
 def _unembedded(c: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
@@ -632,10 +798,11 @@ def _parse_progress(text: str, books: Sequence[Book], mentioned: Book | None) ->
     chapter = chinese_number(match.group("n"))
     if not chapter:
         return None
-    title = match.groupdict().get("t") or match.groupdict().get("t1")
-    book = _mentioned_book(books, f"《{title}》") if title else mentioned
+    groups = match.groupdict()
+    title = groups.get("t") or groups.get("t1") or groups.get("t2")
+    book = (_mentioned_book(books, f"《{title}》") if title else None) or mentioned
     if book is None and len(books) == 1:
         book = books[0]
     if book is None:
         return None
-    return book, min(chapter, book.chapters)
+    return book, chapter
