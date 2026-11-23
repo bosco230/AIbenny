@@ -55,7 +55,9 @@ input[type=text], input[type=password] {
 /* Main layout: avatar left, chat right; stacked on phones */
 .app { height: 100%; display: grid; grid-template-columns: minmax(260px, 42%) 1fr; }
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: 42vh 1fr; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: 42vh minmax(0, 1fr); }
+  .composer { padding: 10px 12px; gap: 6px; }
+  .composer button[type=submit] { padding: .55em .8em; }
 }
 .stage { position: relative; display: flex; flex-direction: column; padding: 16px; min-height: 0; }
 .stage-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

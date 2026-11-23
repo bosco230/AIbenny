@@ -135,7 +135,7 @@ def test_voice_uses_character_voice_and_limits(tmp_path: Path) -> None:
 
 def test_pages_and_only_avatar_folders_are_public(tmp_path: Path) -> None:
     client, _ = make_client(tmp_path)
-    assert "Benny" in client.get("/").text
+    assert "AI 袁枝" in client.get("/").text
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/avatar/benny/idle/000.png").status_code == 200
     assert client.get("/avatar/dingdong/happy/002.svg").status_code == 200

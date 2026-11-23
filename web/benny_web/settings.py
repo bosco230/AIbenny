@@ -55,8 +55,8 @@ class Settings:
         config_dir = Path(os.environ.get("BENNY_WEB_CONFIG", WEB_ROOT / "config"))
         data_dir = Path(os.environ.get("BENNY_WEB_DATA", WEB_ROOT / "data"))
         characters = {
-            "benny": Character("benny", "Benny", config_dir / "personas" / "benny.yml", "zh-HK-HiuMaanNeural"),
-            "dingdong": Character("dingdong", "叮當", config_dir / "personas" / "dingdong.yml", "zh-HK-WanLungNeural"),
+            "benny": Character("benny", "袁枝", config_dir / "personas" / "benny.yml", "zh-HK-HiuMaanNeural"),
+            "dingdong": Character("dingdong", "黃輝", config_dir / "personas" / "dingdong.yml", "zh-HK-WanLungNeural"),
         }
         return cls(
             passcode=os.environ.get("WEB_PASSCODE", ""),

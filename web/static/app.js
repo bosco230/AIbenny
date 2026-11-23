@@ -1,10 +1,10 @@
-/* Benny & 叮當 web edition — page logic (no build step). */
+/* AI 袁枝 web edition — page logic (no build step). */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 const CHARACTERS = {
-  benny: { name: "Benny" },
-  dingdong: { name: "叮當" },
+  benny: { name: "袁枝" },
+  dingdong: { name: "黃輝" },
 };
 const state = {
   character: localStorage.getItem("character") || "benny",
@@ -67,10 +67,10 @@ const Avatar = {
   show(level = 0) {
     if (state.character === "benny") {
       this.img.src = state.speaking ? this.benny("speaking", level) : this.benny("idle", 0);
-      this.img.alt = "Benny";
+      this.img.alt = CHARACTERS.benny.name;
     } else {
       this.img.src = this.dingdong(this.face, state.speaking ? level : 0);
-      this.img.alt = `叮當（${this.face}）`;
+      this.img.alt = `${CHARACTERS.dingdong.name}（${this.face}）`;
     }
   },
 
@@ -375,7 +375,7 @@ function bind() {
   mic.addEventListener("pointerleave", stopRecording);
   $("voice").addEventListener("change", () => localStorage.setItem("voice", $("voice").checked ? "on" : "off"));
   $("forget").addEventListener("click", async () => {
-    if (!confirm("清除 Benny 同叮當記得你嘅所有嘢？呢個動作冇得還原。")) return;
+    if (!confirm(`清除 ${CHARACTERS.benny.name} 同 ${CHARACTERS.dingdong.name} 記得你嘅所有嘢？呢個動作冇得還原。`)) return;
     await api("/api/forget", { method: "POST" });
     $("log").replaceChildren();
     addMessage("system", "已經清除晒你嘅記憶。");
