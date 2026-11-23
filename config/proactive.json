@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "idle_seconds": 900,
   "cooldown_seconds": 1800,
   "quiet_start_hour": 23,
