@@ -64,6 +64,21 @@ describe("character switching", () => {
     expect(src()).toContain("/ai_girlfriend/speaking/");
   });
 
+  it("gives 叮當 idle/talking motion classes and leaves Benny plain", () => {
+    const { container, rerender } = render(<Sprite2DRuntime projection={photo(false)} />);
+    expect(container.querySelector(".avatar--dingdong")).toBeNull();
+
+    act(() => handlers.get("character.active")?.({ type: "character.active", id: "dingdong" }));
+    const idle = container.querySelector(".avatar--dingdong");
+    expect(idle?.classList.contains("avatar--dd-idle")).toBe(true);
+    expect(container.querySelector(".dd-motion .dd-pop .dd-frame")).not.toBeNull();
+
+    rerender(<Sprite2DRuntime projection={photo(true)} />);
+    const talking = container.querySelector(".avatar--dingdong") as HTMLElement;
+    expect(talking.classList.contains("avatar--dd-speaking")).toBe(true);
+    expect(talking.style.getPropertyValue("--dd-level")).toBe("0");
+  });
+
   it("Escape posts /characters/next once; modified Escape is ignored", () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response("{}")));
     vi.stubGlobal("fetch", fetchMock);

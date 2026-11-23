@@ -12,7 +12,7 @@
  * projection.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { preload } from "./preloader";
 import { useWS } from "../../ws/WSProvider";
@@ -456,6 +456,23 @@ export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
     return () => clearInterval(handle);
   }, [framesKey, fps, loop, automaticState, rmsPlayback]);
 
+  // 叮當: follow speech loudness (RMS mouth level 0-3) with a squash/stretch.
+  const isDingdong = activeCharacter === "dingdong" && dingdongFrames !== null;
+  const [ddLevel, setDdLevel] = useState(0);
+  useEffect(() => {
+    if (!isDingdong || rmsPlayback === null) {
+      setDdLevel(0);
+      return;
+    }
+    const update = () => {
+      const elapsed = Math.max(0, Date.now() - rmsPlayback.startedAt);
+      setDdLevel(rmsPlayback.frames[Math.floor(elapsed / rmsPlayback.windowMs)] ?? 0);
+    };
+    update();
+    const timer = setInterval(update, 40);
+    return () => clearInterval(timer);
+  }, [isDingdong, rmsPlayback]);
+
   if (frames.length === 0) {
     return (
       <div
@@ -467,6 +484,33 @@ export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
   }
 
   const src = frames[Math.min(currentIdx, frames.length - 1)];
+
+  if (isDingdong) {
+    const ddSpeaking = selectedState === "speaking";
+    return (
+      <div
+        className={`avatar avatar--sprite2d avatar--dingdong ${
+          ddSpeaking ? "avatar--dd-speaking" : "avatar--dd-idle"
+        } ${props.className ?? ""}`}
+        data-state={props.projection?.directive?.state ?? "idle"}
+        data-frames={String(frames.length)}
+        data-frame-idx={String(currentIdx)}
+        style={{ "--dd-level": String(ddLevel) } as CSSProperties}
+      >
+        {/* motion: idle bob/sway or talking bounce; pop: replays on picture change */}
+        <div className="dd-motion">
+          <div className="dd-pop" key={src}>
+            <img
+              className="avatar-frame dd-frame"
+              src={src}
+              alt={String(props.projection?.directive?.state ?? "avatar")}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`avatar avatar--sprite2d ${props.className ?? ""}`}
