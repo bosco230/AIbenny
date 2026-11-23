@@ -42,6 +42,7 @@ from .diagnostics import install_diagnostics
 from .routes import (
     admin_router,
     appearance_router,
+    characters_router,
     chat_router,
     companions_router,
     dashboard_router,
@@ -56,6 +57,7 @@ from .routes import (
     voice_clone_router,
     voice_profiles_router,
 )
+from .routes.characters import character_message
 from .routes.chat import run_chat_turn
 from .supervisor import RuntimeSupervisor, TurnAdmission, TurnSource
 from .voice_profiles import VoiceProfileStore
@@ -649,6 +651,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await wiring.orchestrator.start()
     await supervisor.set_runtime_state("ready")
     await bridge.remember({"type": "runtime.state", **supervisor.snapshot()})
+    # Windows that open later learn which companion (Benny / 叮當) is active.
+    await bridge.remember(character_message(get_character(character_memories.active_id)))
 
     _mount_static_characters(app, config)
 
@@ -694,6 +698,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(chat_router)
+    app.include_router(characters_router)
     app.include_router(companions_router)
     app.include_router(dashboard_router)
     app.include_router(diagnostics_router)

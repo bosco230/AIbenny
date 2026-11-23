@@ -36,6 +36,7 @@ export default defineConfig({
       "/admin": { target: BACKEND_HOST, changeOrigin: true },
       "/config": { target: BACKEND_HOST, changeOrigin: true },
       "/appearance": { target: BACKEND_HOST, changeOrigin: true },
+      "/characters": { target: BACKEND_HOST, changeOrigin: true },
     },
   },
   build: {

@@ -35,6 +35,15 @@ class AzureQwen3FallbackTTSAdapter:
     def is_speaking(self) -> bool:
         return self._speaking
 
+    @property
+    def voice(self) -> str:
+        return self._azure.voice
+
+    def set_voice(self, voice: str) -> None:
+        # Only Azure has per-character voices; the local Qwen3 fallback keeps
+        # its single built-in voice.
+        self._azure.set_voice(voice)
+
     async def prepare(self, config: TTSConfig) -> None:
         # Do not preload Qwen3 while Azure is available.
         try:

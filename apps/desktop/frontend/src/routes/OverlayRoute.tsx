@@ -14,6 +14,7 @@ import { AvatarHost } from "../components/AvatarHost";
 import { AvatarStatusBubble } from "../components/AvatarStatusBubble";
 import { SpeechBubble } from "../components/SpeechBubble";
 import { useAppearance } from "../hooks/useAppearance";
+import { useCharacterSwitchKey } from "../hooks/useCharacterSwitchKey";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
@@ -32,6 +33,7 @@ function readSavedZoom(): number {
 }
 
 export function OverlayRoute(): JSX.Element {
+  useCharacterSwitchKey();
   const appearance = useAppearance();
   const [zoom, setZoom] = useState<number>(readSavedZoom);
 

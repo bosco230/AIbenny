@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .admin import router as admin_router
 from .appearance import router as appearance_router
+from .characters import router as characters_router
 from .chat import router as chat_router
 from .companions import router as companions_router
 from .dashboard import router as dashboard_router
@@ -26,6 +27,7 @@ from .voice_profiles import router as voice_profiles_router
 __all__ = [
     "admin_router",
     "appearance_router",
+    "characters_router",
     "chat_router",
     "companions_router",
     "dashboard_router",

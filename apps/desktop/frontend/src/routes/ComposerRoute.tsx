@@ -2,12 +2,14 @@ import { useEffect, useRef, type CSSProperties } from "react";
 
 import { TextInput } from "../components/TextInput";
 import { useAppearance } from "../hooks/useAppearance";
+import { useCharacterSwitchKey } from "../hooks/useCharacterSwitchKey";
 import { useRuntimeState } from "../hooks/useRuntimeState";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
 /** Interactive message composer docked underneath the click-through avatar. */
 export function ComposerRoute(): JSX.Element {
+  useCharacterSwitchKey();
   const appearance = useAppearance();
   const runtime = useRuntimeState();
   const composerRef = useRef<HTMLDivElement>(null);

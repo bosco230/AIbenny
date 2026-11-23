@@ -1,0 +1,26 @@
+# 叮當 — personal Sprite2D pack used by the Benny ⇄ 叮當 character switch.
+# idle.png / speaking.png are background-removed cut-outs of the two
+# original JPGs in this folder (standing and laughing).
+
+schema_version: 1
+id: dingdong
+name: 叮當
+author: local
+license: personal-use
+kind: sprite2d
+preview: idle.png
+default_state: idle
+default_emotion: neutral
+transition_ms: 120
+
+emotions:
+  idle:
+    frames: [idle.png]
+    speaking_frames: [speaking.png]
+    fps: 1
+    loop: true
+  speaking:
+    frames: [speaking.png]
+    speaking_frames: [speaking.png]
+    fps: 1
+    loop: true

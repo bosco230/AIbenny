@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 
 import { ToolbarIcon } from "../components/ToolbarIcon";
 import { useAppearance } from "../hooks/useAppearance";
+import { useCharacterSwitchKey } from "../hooks/useCharacterSwitchKey";
 import { useTauriCommand } from "../hooks/useTauriCommand";
 import { useRuntimeState } from "../hooks/useRuntimeState";
 import { useVoiceMode } from "../hooks/useVoiceMode";
@@ -9,6 +10,7 @@ import { useVoiceMode } from "../hooks/useVoiceMode";
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
 export function ControlsRoute(): JSX.Element {
+  useCharacterSwitchKey();
   const appearance = useAppearance();
   const {
     configureOverlayWindows,

@@ -149,7 +149,38 @@ function renderTasks() {
   byId("task-count").textContent = `${active} active`;
 }
 
+// Benny ⇄ 叮當: Escape (or the header button) switches companion.
+let characterSwitching = false;
+async function switchCharacter() {
+  if (characterSwitching) return;
+  characterSwitching = true;
+  try {
+    const response = await fetch("/characters/next", { method: "POST" });
+    if (response.ok) showCharacter(await response.json());
+  } catch {
+    /* backend offline; the WS reconnect will refresh the label */
+  } finally {
+    characterSwitching = false;
+  }
+}
+
+function showCharacter(message) {
+  const button = byId("character-switch");
+  if (button && message.display_name) button.textContent = `${message.display_name} ⇄`;
+}
+
+byId("character-switch")?.addEventListener("click", () => { void switchCharacter(); });
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+  event.preventDefault();
+  void switchCharacter();
+});
+
 function handleMessage(message) {
+  if (message.type === "character.active") {
+    showCharacter(message);
+    return;
+  }
   if (message.type === "bubble.text") {
     const reply = byId("reply");
     if (message.reset) {

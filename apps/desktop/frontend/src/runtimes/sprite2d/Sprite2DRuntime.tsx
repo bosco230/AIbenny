@@ -169,10 +169,22 @@ export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
 
   useEffect(() => () => cancelHappyTimer(), []);
 
+  // Active companion (Benny / 叮當), switched with Escape via /characters/next.
+  const [activeCharacter, setActiveCharacter] = useState<string>("benny");
+  useEffect(
+    () =>
+      ws.subscribe("character.active", (msg) => {
+        setActiveCharacter(msg.id);
+      }),
+    [ws.subscribe]
+  );
+
   const isAiGirlfriend =
-    props.projection?.frames?.some((frame) =>
+    activeCharacter === "benny" &&
+    (props.projection?.frames?.some((frame) =>
       frame.includes("/ai_girlfriend/")
-    ) ?? false;
+    ) ??
+      false);
 
   const testFrames =
     testState && validStates.includes(testState)
@@ -183,11 +195,19 @@ export function Sprite2DRuntime(props: Sprite2DRuntimeProps) {
   // Keep natural blinking and RMS-driven mouth movement.
   const selectedState =
     automaticState === "speaking" ? "speaking" : "idle";
-  const automaticFrames = isAiGirlfriend
-    ? getStateFrames(selectedState)
-    : null;
+  // 叮當 has two cut-out pictures: standing (idle) and laughing (speaking).
+  const dingdongFrames =
+    activeCharacter === "dingdong"
+      ? [
+          `http://127.0.0.1:8000/static/characters/dingdong/${
+            selectedState === "speaking" ? "speaking" : "idle"
+          }.png`,
+        ]
+      : null;
+  const automaticFrames =
+    dingdongFrames ?? (isAiGirlfriend ? getStateFrames(selectedState) : null);
   const frames =
-    testFrames ??
+    (activeCharacter === "benny" ? testFrames : null) ??
     automaticFrames ??
     props.projection?.frames ??
     [];

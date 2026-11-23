@@ -181,6 +181,15 @@ export interface TaskCardMessage {
   update: TaskUpdate;
 }
 
+/** Active companion (Benny / 叮當); replayed to windows that open later. */
+export interface CharacterActiveMessage {
+  type: "character.active";
+  id: string;
+  display_name: string;
+  sprite_directory: string;
+  voice?: string;
+}
+
 export type SystemNoticeLevel = "info" | "warn" | "error";
 
 export interface SystemNoticeMessage {
@@ -227,6 +236,7 @@ export type ServerMessage =
   | RuntimeStateMessage
   | ComponentHealthMessage
   | TaskCardMessage
+  | CharacterActiveMessage
   | SystemNoticeMessage;
 
 export type ServerMessageType = ServerMessage["type"];
@@ -300,6 +310,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     t === "runtime.state" ||
     t === "component.health" ||
     t === "task.card" ||
+    t === "character.active" ||
     t === "system.notice"
   );
 }

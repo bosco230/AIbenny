@@ -9,7 +9,7 @@ import tempfile
 import wave
 from collections.abc import AsyncIterable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -44,6 +44,18 @@ class AzureTTSAdapter:
         self._ready = asyncio.Event()
         self._is_speaking = False
         self._mouth_frames: list[int] = []
+
+    @property
+    def voice(self) -> str:
+        return self._settings.voice
+
+    def set_voice(self, voice: str) -> None:
+        """Switch the Azure neural voice for later utterances (character switch)."""
+
+        voice = voice.strip()
+        if not voice or len(voice) > 128:
+            raise ValueError("Azure voice name must contain 1 to 128 characters")
+        self._settings = replace(self._settings, voice=voice)
 
     def set_session_api_key(self, value: str) -> None:
         token = value.strip()

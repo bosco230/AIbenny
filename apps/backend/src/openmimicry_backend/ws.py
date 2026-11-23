@@ -79,12 +79,17 @@ class BroadcastBridge:
         self._component_health: dict[str, dict[str, Any]] = {}
         self._latest_tasks: dict[str, dict[str, Any]] = {}
         self._conversation: dict[str, dict[str, Any]] = {}
+        self._latest_character: dict[str, Any] | None = None
 
     async def add_socket(self, ws: WebSocket) -> bool:
         async with self._lock:
             self._sockets.add(ws)
             self._send_locks.setdefault(ws, asyncio.Lock())
-            replay = [message for message in (self._latest_runtime,) if message is not None]
+            replay = [
+                message
+                for message in (self._latest_runtime, self._latest_character)
+                if message is not None
+            ]
             replay.extend(self._component_health.values())
             replay.extend(
                 message
@@ -156,6 +161,8 @@ class BroadcastBridge:
             self._latest_avatar = dict(message)
         elif message.get("type") == "runtime.state":
             self._latest_runtime = dict(message)
+        elif message.get("type") == "character.active":
+            self._latest_character = dict(message)
         elif message.get("type") == "turn.state":
             # A rejected attempt is not the current turn and must not replace
             # the authoritative state replayed to newly opened windows.
