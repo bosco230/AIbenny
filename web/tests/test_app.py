@@ -94,7 +94,7 @@ def test_login_chat_and_forged_cookie(tmp_path: Path) -> None:
     assert reply == {"character": "dingdong", "reply": "收到：你好", "emotion": "happy", "intensity": 0.8}
     # The web persona and shared rules are sent; no 金庸 in the web rules.
     system = "\n".join(m["content"] for m in llm.calls[-1] if m["role"] == "system")
-    assert "叮當" in system and "網頁" in system and "金庸" not in system
+    assert "黃輝" in system and "網頁" in system and "金庸" not in system
 
     forger = TestClient(client.app, cookies={"benny_session": "0" * 32 + ".9999999999.deadbeef"})
     assert forger.get("/api/me").status_code == 401

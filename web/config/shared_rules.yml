@@ -1,4 +1,4 @@
-# Rules shared by every companion (Benny and 叮當).
+# Rules shared by both web companions (袁枝 and 黃輝).
 # Each entry is appended to the active character's system prompt on every
 # turn (see apps/backend/.../routes/chat.py), so edit them here once instead
 # of in each personality file. Changes apply on the next message.
