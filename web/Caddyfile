@@ -1,0 +1,13 @@
+# HTTPS front door. SITE_ADDRESS comes from .env, e.g. 5-75-1-2.sslip.io
+# (the VPS IP with dashes + .sslip.io). Caddy gets and renews the
+# certificate automatically.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy web:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "microphone=(self), camera=()"
+	}
+}

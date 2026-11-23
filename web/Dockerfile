@@ -31,4 +31,6 @@ RUN useradd --create-home benny && mkdir -p /app/web/data && chown -R benny /app
 USER benny
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"
-CMD ["uvicorn", "benny_web.app:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+# Only Caddy/cloudflared can reach port 8080 (not published), so trust their
+# X-Forwarded-For: the passcode throttle then works per real visitor IP.
+CMD ["uvicorn", "benny_web.app:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]

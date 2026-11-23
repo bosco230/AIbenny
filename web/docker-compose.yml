@@ -1,6 +1,11 @@
-# Benny & 叮當 web edition on one small VPS.
+# AI 袁枝 web edition on one small VPS.
 #   cd web && cp .env.example .env   (fill in the values)
 #   docker compose up -d --build
+#
+# Default front door: Caddy with automatic HTTPS on ports 80/443
+# (free URL such as https://5-75-1-2.sslip.io).
+# Alternative: Cloudflare Tunnel with your own domain —
+#   docker compose --profile cloudflare up -d --build   (and stop caddy)
 services:
   ollama:
     # CPU-only embeddings (bge-m3) for memory and the novel library.
@@ -31,11 +36,26 @@ services:
     volumes:
       - ./data:/app/web/data
     depends_on: [ollama]
-    # Not published on the host: only cloudflared reaches it.
+    # Not published on the host: only Caddy (or cloudflared) reaches it.
     expose: ["8080"]
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+
   cloudflared:
-    # Free HTTPS URL without opening any port on the VPS.
+    # Optional (own domain): docker compose --profile cloudflare up -d
+    profiles: ["cloudflare"]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
@@ -43,3 +63,5 @@ services:
 
 volumes:
   ollama:
+  caddy_data:
+  caddy_config:
