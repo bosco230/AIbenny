@@ -6,8 +6,8 @@ faces/smile_blink.svg.
 
 Expressions: neutral, smile, happy, sad, angry, surprised, worried, thinking.
 
-Design: big head, short body; yellow baseball cap over a dark-brown spiky
-fringe; large eyes with two
+Design: big head, short body; yellow baseball cap (the user's 「黃」 badge
+on the front) over a dark-brown spiky fringe; large eyes with two
 highlights; blue zip-less hoodie with kangaroo pocket and drawstrings, a
 little gold bell on the right drawstring (the "叮"); jeans and white
 sneakers. Deliberately original.
@@ -17,6 +17,8 @@ Usage:  python -I scripts/make_dingdong_svg.py
 
 from __future__ import annotations
 
+import base64
+from functools import lru_cache
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "characters" / "dingdong" / "faces"
@@ -126,8 +128,7 @@ HEAD = """
     <path d="M200 38 Q160 70 148 128 M200 38 Q240 70 252 128" fill="none" stroke="#DFA20F" stroke-width="2.5"/>
     <path d="M112 84 Q150 50 204 46" fill="none" stroke="#FFF6C8" stroke-width="9" stroke-linecap="round" opacity="0.7"/>
     <circle cx="200" cy="36" r="8" fill="#F2B51C" stroke="#C98A0A" stroke-width="2.5"/>
-    <circle cx="200" cy="96" r="15" fill="#FFFFFF" opacity="0.92"/>
-    <path d="M192 103 Q192 89 200 89 Q208 89 208 103 L210 106 Q200 108 190 106 Z" fill="url(#gold)" stroke="#9C6A10" stroke-width="1.2"/>
+    <!--BADGE-->
     <path d="M84 132 Q200 112 316 132 Q332 146 314 156 Q200 136 86 156 Q68 146 84 132 Z" fill="url(#brim)" stroke="#C98A0A" stroke-width="3"/>
   </g>
   <!-- nose -->
@@ -252,10 +253,29 @@ def extras(expression: str) -> str:
     return "".join(parts)
 
 
+BADGE_PNG = OUT.parent / "source" / "badge.png"  # from scripts/prepare_dingdong_badge.py
+
+
+@lru_cache(maxsize=1)
+def badge() -> str:
+    """The user's 「黃」 badge on the front of the cap (embedded: an SVG shown
+    in <img> cannot load external files)."""
+
+    if not BADGE_PNG.is_file():
+        return ""
+    data = base64.b64encode(BADGE_PNG.read_bytes()).decode("ascii")
+    width = 60
+    height = round(width * 246 / 240, 1)
+    return (
+        f'<image href="data:image/png;base64,{data}" x="{200 - width / 2}" y="56" '
+        f'width="{width}" height="{height}" preserveAspectRatio="xMidYMid meet"/>'
+    )
+
+
 def svg(expression: str, level: int = 0, blink: bool = False) -> str:
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 470" width="400" height="470">'
-        f"<title>叮當 · {expression}</title>{DEFS}{BODY}{HEAD}"
+        f"<title>叮當 · {expression}</title>{DEFS}{BODY}{HEAD.replace('<!--BADGE-->', badge())}"
         f"{extras(expression)}{eyes(expression, blink)}{mouth(expression, level)}"
         "</svg>\n"
     )
