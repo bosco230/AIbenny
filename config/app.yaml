@@ -7,7 +7,7 @@ app:
 
 llm:
   active_backend: ollama
-  history_turns: 4
+  history_turns: 10
   backends:
     ollama:
       adapter: litellm

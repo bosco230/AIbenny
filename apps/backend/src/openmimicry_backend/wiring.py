@@ -282,8 +282,14 @@ def _build_stt(config: AppConfig) -> STTAdapter:
 class _MemoryLLMCompletion:
     """Turn a selected streaming adapter into the memory extractor surface."""
 
-    def __init__(self, adapter: LLMAdapter) -> None:
+    def __init__(
+        self,
+        adapter: LLMAdapter,
+        *,
+        system: str = "You extract durable user memories into strict JSON.",
+    ) -> None:
         self._adapter = adapter
+        self._system = system
 
     async def complete(self, prompt: str) -> str:
         from openmimicry.core import LLMMessage
@@ -293,7 +299,7 @@ class _MemoryLLMCompletion:
             [
                 LLMMessage(
                     role="system",
-                    content="You extract durable user memories into strict JSON.",
+                    content=self._system,
                 ),
                 LLMMessage(role="user", content=prompt),
             ],
@@ -320,15 +326,37 @@ def _build_memory(config: AppConfig, llm: LLMAdapter) -> MemoryService:
     else:  # pragma: no cover - Pydantic rejects unknown providers.
         raise WiringError(f"unknown memory.provider: {memory.provider!r}")
 
-    llm_extractor = None
-    if memory.enabled and memory.extraction_mode == "llm":
+    def _memory_llm() -> LLMAdapter:
         selected: LLMAdapter = llm
         backend_getter = getattr(llm, "backend", None)
         backend_name = memory.llm_backend or config.llm.roles.memory_extract
         if callable(backend_getter):
             selected = cast(LLMAdapter, backend_getter(backend_name))
-        llm_extractor = LLMExtractor(_MemoryLLMCompletion(selected))
+        return selected
+
+    llm_extractor = None
+    if memory.enabled and memory.extraction_mode == "llm":
+        llm_extractor = LLMExtractor(_MemoryLLMCompletion(_memory_llm()))
+
+    semantic = None
+    summary_llm = None
+    if memory.enabled and isinstance(provider, LocalSQLiteMemory) and memory.embedding_model:
+        from openmimicry.memory.semantic import OllamaEmbedder, SemanticStore
+
+        semantic = SemanticStore(
+            memory.database_path,
+            OllamaEmbedder(model=memory.embedding_model, base_url=memory.embedding_endpoint),
+        )
+        if memory.summaries:
+            summary_llm = _MemoryLLMCompletion(
+                _memory_llm(),
+                system="你負責將對話寫成簡短、客觀嘅繁體中文摘要。",
+            )
     return MemoryService(
+        semantic=semantic,
+        semantic_deadline_ms=memory.semantic_deadline_ms,
+        semantic_threshold=memory.semantic_threshold,
+        summary_llm=summary_llm,
         provider=provider,
         retrieval_limit=memory.retrieval_limit,
         retrieval_deadline_ms=memory.retrieval_deadline_ms,

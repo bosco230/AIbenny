@@ -328,6 +328,16 @@ class MemoryConfig(BaseModel):
     bilingual_extraction: bool = False
     reconcile_preferences: bool = False
     merge_llm_bilingual: bool = False
+    # Semantic recall (local provider only). An Ollama embedding model such as
+    # bge-m3 enables vector search, conversation summaries and event
+    # follow-ups. Leave empty to keep the lexical-only behaviour.
+    embedding_model: str | None = None
+    embedding_endpoint: str = "http://127.0.0.1:11434"
+    semantic_deadline_ms: int = Field(default=800, ge=50, le=10000)
+    semantic_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    summaries: bool = True
+    summary_batch_turns: int = Field(default=8, ge=2, le=50)
+    summary_idle_seconds: int = Field(default=600, ge=60, le=86400)
     store_raw_audio: Literal[False] = False
 
     @model_validator(mode="after")

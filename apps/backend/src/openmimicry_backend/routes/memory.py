@@ -61,6 +61,8 @@ async def memory_settings(request: Request) -> dict[str, object]:
         "retrieval_deadline_ms": config.retrieval_deadline_ms,
         "retention_days": config.retention_days,
         "store_raw_audio": False,
+        "embedding_model": config.embedding_model,
+        "summaries": config.summaries,
         "count": len(records),
         "restart_required_after_change": True,
     }
@@ -81,8 +83,11 @@ async def update_memory_settings(
             detail="A Hindsight endpoint is required when Hindsight memory is enabled.",
         )
     try:
+        # Merge onto the running config so settings the dashboard form does
+        # not show (bilingual extraction, embeddings, summaries) survive a save.
+        current = request.app.state.config.memory.model_dump(mode="json")
         candidate = MemoryConfig.model_validate(
-            {**values.model_dump(mode="json"), "store_raw_audio": False}
+            {**current, **values.model_dump(mode="json"), "store_raw_audio": False}
         )
     except ValidationError as exc:
         details = [
@@ -152,15 +157,46 @@ async def clear_memory(values: ClearMemoryRequest, request: Request) -> dict[str
     return {"deleted": count}
 
 
+def _summary_json(summary: object) -> dict[str, object]:
+    return {
+        "id": getattr(summary, "id"),
+        "text": getattr(summary, "text"),
+        "created_at": getattr(summary, "created_at").isoformat(),
+    }
+
+
+@router.get("/memory/summaries")
+async def memory_summaries(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500),
+) -> dict[str, object]:
+    summaries_fn = getattr(request.app.state.memory, "summaries", None)
+    items = await summaries_fn(limit=limit) if summaries_fn is not None else []
+    return {"summaries": [_summary_json(item) for item in items]}
+
+
+@router.delete("/memory/summaries/{summary_id}")
+async def delete_memory_summary(summary_id: str, request: Request) -> dict[str, object]:
+    if len(summary_id) > 128:
+        raise HTTPException(status_code=422, detail="invalid summary id")
+    delete_fn = getattr(request.app.state.memory, "delete_summary", None)
+    if delete_fn is None or not await delete_fn(summary_id):
+        raise HTTPException(status_code=404, detail="summary not found")
+    return {"deleted": True, "id": summary_id}
+
+
 @router.get("/memory/export")
 async def export_memory(request: Request) -> JSONResponse:
     records = await request.app.state.memory.list(limit=1000)
+    summaries_fn = getattr(request.app.state.memory, "summaries", None)
+    summaries = await summaries_fn(limit=500) if summaries_fn is not None else []
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return JSONResponse(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "exported_at": datetime.now(timezone.utc).isoformat(),
             "records": [record.model_dump(mode="json") for record in records],
+            "summaries": [_summary_json(item) for item in summaries],
         },
         headers={
             "Content-Disposition": (f'attachment; filename="openmimicry-memory-{timestamp}.json"')

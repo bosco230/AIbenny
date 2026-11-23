@@ -396,6 +396,7 @@ async function refreshInteractionSettings() {
 async function refreshMemory() {
   const target = byId("memory-error");
   target.textContent = "";
+  void refreshMemorySummaries();
   try {
     const settingsResponse = await fetch("/memory/settings");
     if (!settingsResponse.ok) throw new Error(`${settingsResponse.status}: ${await settingsResponse.text()}`);
@@ -425,9 +426,15 @@ async function refreshMemory() {
       root.append(empty);
       return;
     }
-    for (const record of data.records) {
+    for (const group of groupMemoryRecords(data.records)) {
+      if (!group.records.length) continue;
+      const heading = document.createElement("h3");
+      heading.className = group.muted ? "memory-group memory-group--muted" : "memory-group";
+      heading.textContent = `${group.title}（${group.records.length}）`;
+      root.append(heading);
+    for (const record of group.records) {
       const row = document.createElement("div");
-      row.className = "memory-record";
+      row.className = group.muted ? "memory-record memory-record--muted" : "memory-record";
       const predicate = document.createElement("input");
       predicate.value = record.predicate;
       predicate.setAttribute("aria-label", "Memory predicate");
@@ -461,6 +468,82 @@ async function refreshMemory() {
         else await refreshMemory();
       });
       row.append(predicate, value, save, remove);
+      root.append(row);
+    }
+    }
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
+// Mirrors CORE_PREDICATES / _NOISE_PREFIXES in openmimicry/memory/semantic.py.
+const MEMORY_CORE = new Set([
+  "name", "user_name", "nickname", "中文名", "花名", "job", "workplace", "work_history",
+  "上司", "family", "partner", "pet", "user_pet_relationship", "location", "birthday",
+  "language_preference",
+]);
+const MEMORY_NOISE_PREFIXES = [
+  "user_emotion", "user_mood", "user_feeling", "user_expression", "user_last_message",
+  "user_request", "user_greeting", "user_speaks", "user_language",
+  "user_eaten", "topic_of_conversation", "language_used", "weather", "activity",
+];
+
+function groupMemoryRecords(records) {
+  const groups = {
+    core: { title: "基本資料（每次對話都會用到）", records: [] },
+    prefs: { title: "喜好", records: [] },
+    events: { title: "近期事件（Benny 會跟進）", records: [] },
+    other: { title: "其他記憶（話題相關時會用到）", records: [] },
+    noise: { title: "舊雜訊（唔會再被回憶，可以刪除）", records: [], muted: true },
+  };
+  for (const record of records) {
+    const raw = String(record.predicate || "").trim();
+    const key = raw.toLowerCase();
+    if (MEMORY_NOISE_PREFIXES.some((prefix) => key.startsWith(prefix))) groups.noise.records.push(record);
+    else if (MEMORY_CORE.has(raw)) groups.core.records.push(record);
+    else if (key === "likes" || key === "dislikes") groups.prefs.records.push(record);
+    else if (key === "event") groups.events.records.push(record);
+    else groups.other.records.push(record);
+  }
+  groups.events.records.sort((a, b) => String(a.value).localeCompare(String(b.value)));
+  return [groups.core, groups.prefs, groups.events, groups.other, groups.noise];
+}
+
+async function refreshMemorySummaries() {
+  const root = byId("memory-summaries");
+  const target = byId("memory-error");
+  try {
+    const response = await fetch("/memory/summaries?limit=50");
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    root.replaceChildren();
+    if (!data.summaries?.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "未有對話摘要。";
+      root.append(empty);
+      return;
+    }
+    for (const summary of data.summaries) {
+      const row = document.createElement("div");
+      row.className = "memory-summary";
+      const when = document.createElement("time");
+      when.dateTime = summary.created_at;
+      when.textContent = new Date(summary.created_at).toLocaleString("zh-HK", {
+        month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+      const text = document.createElement("p");
+      text.textContent = summary.text;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "quiet";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        const deletion = await fetch(`/memory/summaries/${encodeURIComponent(summary.id)}`, { method: "DELETE" });
+        if (!deletion.ok) target.textContent = `${deletion.status}: ${await deletion.text()}`;
+        else await refreshMemorySummaries();
+      });
+      row.append(when, text, remove);
       root.append(row);
     }
   } catch (error) {

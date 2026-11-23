@@ -223,6 +223,9 @@
           <button id="memory-clear" type="button" class="quiet">Delete all</button>
         </div>
         <div id="memory-records" class="memory-records"><p class="empty">No retained facts.</p></div>
+        <h3 class="memory-group">對話摘要</h3>
+        <p class="field-hint">每傾大約 8 輪、或者停咗 10 分鐘，Benny 會將之前嘅對話寫成摘要，下次傾偈時參考。</p>
+        <div id="memory-summaries" class="memory-records"><p class="empty">未有對話摘要。</p></div>
         <p class="field-hint">Turning memory on defaults to private Local SQLite storage. Selecting None turns memory off. Changes require a backend restart. Retrieval is deadline-bounded; writes happen after the reply. Raw audio is never stored. Hindsight retention/deletion policy is managed by its external service.</p>
         <p id="memory-error" class="error" role="alert"></p>
       </section>

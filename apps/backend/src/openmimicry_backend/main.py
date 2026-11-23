@@ -291,6 +291,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     }
     presentation_state = {"value": config.interaction.response_presentation}
     proactive_idle = {"last_user_activity": time.monotonic(), "topic_index": 0}
+    # Phase 2: finished turns waiting to be condensed into a stored summary.
+    summary_state: dict = {"pending": [], "task": None}
+
+    def _schedule_summary(*, force: bool = False) -> None:
+        pending: list[tuple[str, str]] = summary_state["pending"]
+        if not pending or not wiring.memory.supports_summaries:
+            return
+        if not force and len(pending) < config.memory.summary_batch_turns:
+            return
+        running = summary_state["task"]
+        if running is not None and not running.done():
+            return
+        batch = list(pending)
+        pending.clear()
+
+        async def _summarize() -> None:
+            try:
+                summary = await wiring.memory.summarize(batch)
+                _log.info("MEMORY_SUMMARY_STORED turns=%d stored=%s", len(batch), bool(summary))
+            except Exception:
+                _log.exception("MEMORY_SUMMARY_FAILED turns=%d", len(batch))
+
+        summary_state["task"] = asyncio.create_task(
+            _summarize(), name="openmimicry.memory.summarize"
+        )
 
     async def _run_ordered_turn(text: str, history, *, remember_turn: bool = True) -> str | None:
         # BENNY_110E_26O: latency diagnostic
@@ -323,6 +348,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 reply,
                 source=f"conversation:{diagnostics.session_id}",
             )
+            summary_state["pending"].append((text, reply))
+            _schedule_summary()
         return reply
 
     conversation = ConversationCoordinator(
@@ -548,6 +575,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "如果有之前嘅對話內容，可以自然延續其中一個話題；否則提出一個新話題。",
             )
             topic = topics[proactive_idle["topic_index"] % len(topics)]
+            followup = None
+            try:
+                followup = await wiring.memory.due_followup()
+            except Exception:
+                _log.warning("PROACTIVE_FOLLOWUP_LOOKUP_FAILED", exc_info=True)
+            if followup is not None:
+                topic = (
+                    f"使用者之前講過 {followup.when.isoformat()} 有呢件事：「{followup.description}」。"
+                    "自然咁關心下件事進行成點、結果如何或者佢有咩感受，唔好扮知道結果。"
+                )
             recent_greetings = "\n".join(f"- {reply}" for reply in conversation.proactive_replies)
             if recent_greetings:
                 topic += f"\n你最近已經講過以下說話，今次請避免重複相同問題或內容：\n{recent_greetings}"
@@ -564,13 +601,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if submission.accepted:
                 proactive_idle["last_user_activity"] = time.monotonic()
                 _last_proactive_sent = proactive_idle["last_user_activity"]
-                proactive_idle["topic_index"] += 1
+                if followup is not None:
+                    with suppress(Exception):
+                        await wiring.memory.mark_followed_up(followup.memory_id)
+                    _log.info("PROACTIVE_EVENT_FOLLOWUP: %s", followup.memory_id)
+                else:
+                    proactive_idle["topic_index"] += 1
                 _log.info("PROACTIVE_TURN_STARTED: idle %.0f seconds", elapsed)
     speech_turn_task = asyncio.create_task(
         _consume_speech_turns(), name="openmimicry.backend.speech_turns"
     )
 
     proactive_task = asyncio.create_task(_proactive_idle_loop(), name="openmimicry.backend.proactive_idle")
+
+    async def _memory_maintenance_loop() -> None:
+        # Phase 2: index memories at startup, then summarise idle conversations.
+        with suppress(Exception):
+            await wiring.memory.warm_up()
+        while True:
+            await asyncio.sleep(30)
+            idle = time.monotonic() - proactive_idle["last_user_activity"]
+            if idle >= config.memory.summary_idle_seconds and supervisor.can_accept_turn:
+                _schedule_summary(force=True)
+
+    memory_task = asyncio.create_task(
+        _memory_maintenance_loop(), name="openmimicry.backend.memory_maintenance"
+    )
 
     def _report_proactive_failure(task: asyncio.Task) -> None:
         if task.cancelled():
@@ -603,6 +659,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         proactive_task.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await proactive_task
+        memory_task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await memory_task
         speech_turn_task.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await speech_turn_task

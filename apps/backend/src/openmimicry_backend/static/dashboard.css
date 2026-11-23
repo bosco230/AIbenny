@@ -57,6 +57,12 @@ h2 { margin: 0; font-size: 18px; }
 .memory-records { display: grid; gap: 8px; margin-top: 12px; }
 .memory-record { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(160px, 2fr) auto auto; gap: 8px; }
 .memory-record input { min-width: 0; }
+.memory-group { margin: 16px 0 4px; font-size: .95rem; }
+.memory-group--muted { opacity: .65; }
+.memory-record--muted { opacity: .55; }
+.memory-summary { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: start; }
+.memory-summary p { margin: 0; }
+.memory-summary time { opacity: .7; font-size: .85rem; white-space: nowrap; }
 .explanation { margin-bottom: 0; }
 .error:empty { display: none; }
 .error { color: #ff9da3; font-size: 13px; }

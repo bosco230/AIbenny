@@ -19,4 +19,12 @@ memory:
   retention_days: 365
   extraction_mode: llm
   llm_backend: ollama
+  # Phase 2: semantic recall, conversation summaries, event follow-ups.
+  embedding_model: bge-m3
+  embedding_endpoint: http://127.0.0.1:11434
+  semantic_deadline_ms: 800
+  semantic_threshold: 0.5
+  summaries: true
+  summary_batch_turns: 8
+  summary_idle_seconds: 600
   store_raw_audio: false
