@@ -200,6 +200,56 @@ async def build_runtime(
 # ---------------------------------------------------------------------------
 
 
+def _ollama_extra(backend_name: str, backend: Any) -> dict[str, Any]:
+    """Ollama-only request options: JSON mode and how long to stay loaded."""
+
+    if not backend.model.startswith(("ollama_chat/", "ollama/")):
+        return {}
+    extra: dict[str, Any] = {}
+    # Benny's chat backends expect the JSON reply envelope.
+    if backend_name == "ollama" or backend_name.startswith("ollama-"):
+        extra["response_format"] = {"type": "json_object"}
+    if backend.keep_alive:
+        extra["keep_alive"] = backend.keep_alive
+    return extra
+
+
+class _FallbackLLM:
+    """Use ``fallback`` when ``primary`` fails before streaming any text.
+
+    Everything except ``generate`` is delegated to the primary adapter, so the
+    switchboard's model/credential helpers keep working unchanged.
+    """
+
+    def __init__(self, primary: LLMAdapter, fallback: LLMAdapter, *, fallback_name: str) -> None:
+        from openmimicry.llm import LLMRouter, RouterRetryPolicy
+
+        self._primary = primary
+        self.fallback_name = fallback_name
+        self._router = LLMRouter(
+            primary=primary,
+            fallback=fallback,
+            retry=RouterRetryPolicy(attempts=1, backoff_s=0.0),
+        )
+
+    @property
+    def name(self) -> str:
+        return str(getattr(self._primary, "name", "litellm"))
+
+    def generate(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+        return self._router.generate(messages, **kwargs)
+
+    async def healthcheck(self) -> bool:
+        return await self._primary.healthcheck()
+
+    async def close(self) -> None:
+        # The fallback is a configured backend of its own and is closed there.
+        await self._primary.close()
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self._primary, item)
+
+
 def _build_llm(config: AppConfig) -> LLMAdapter:
     if config.llm.backends:
         backends: dict[str, LLMAdapter] = {}
@@ -217,12 +267,7 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
                         temperature=backend.temperature,
                         max_tokens=backend.max_tokens,
                         web_search=backend.web_search,
-                        extra=(
-                            {"response_format": {"type": "json_object"}}
-                            if backend_name == "ollama"
-                            and backend.model.startswith(("ollama_chat/", "ollama/"))
-                            else {}
-                        ),
+                        extra=_ollama_extra(backend_name, backend),
                     )
                 )
             else:
@@ -231,6 +276,18 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
                 )
             backends[backend_name] = adapter
             models[backend_name] = backend.model
+        for backend_name, backend in config.llm.backends.items():
+            fallback_name = backend.fallback_backend
+            if not fallback_name:
+                continue
+            if fallback_name not in backends or fallback_name == backend_name:
+                raise WiringError(
+                    f"llm.backends.{backend_name}.fallback_backend {fallback_name!r} "
+                    "must name another configured backend"
+                )
+            backends[backend_name] = _FallbackLLM(
+                backends[backend_name], backends[fallback_name], fallback_name=fallback_name
+            )
         active = config.llm.active_backend or next(iter(backends))
         return LLMSwitchboard(backends=backends, models=models, active=active)
 
@@ -345,7 +402,11 @@ def _build_memory(config: AppConfig, llm: LLMAdapter) -> MemoryService:
 
         semantic = SemanticStore(
             memory.database_path,
-            OllamaEmbedder(model=memory.embedding_model, base_url=memory.embedding_endpoint),
+            OllamaEmbedder(
+                model=memory.embedding_model,
+                base_url=memory.embedding_endpoint,
+                cpu_only=memory.embedding_device == "cpu",
+            ),
         )
         if memory.summaries:
             summary_llm = _MemoryLLMCompletion(

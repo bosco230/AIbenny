@@ -122,6 +122,12 @@ class LLMBackendConfig(BaseModel):
     # grounding and standardized URL citations. It is opt-in because searches
     # can add provider charges even when the selected model is free.
     web_search: bool = False
+    # Name of another backend to use when this one fails (e.g. a smaller
+    # local model when the large one cannot load).
+    fallback_backend: str | None = None
+    # Ollama only: how long the model stays loaded after a request, e.g.
+    # "60m". Avoids a multi-second reload after idle periods.
+    keep_alive: str | None = None
 
 
 class LLMRoleAssignments(BaseModel):
@@ -333,6 +339,9 @@ class MemoryConfig(BaseModel):
     # follow-ups. Leave empty to keep the lexical-only behaviour.
     embedding_model: str | None = None
     embedding_endpoint: str = "http://127.0.0.1:11434"
+    # "cpu" keeps the small embedding model off the GPU so a large chat model
+    # and Whisper fit in VRAM (bge-m3 on CPU: ~40 ms per query).
+    embedding_device: Literal["auto", "cpu"] = "auto"
     semantic_deadline_ms: int = Field(default=800, ge=50, le=10000)
     semantic_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     summaries: bool = True

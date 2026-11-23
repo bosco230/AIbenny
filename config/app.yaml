@@ -9,7 +9,22 @@ llm:
   active_backend: ollama
   history_turns: 10
   backends:
+    # Phase 3: qwen3:14b (Q4, ~9.7 GB) fits beside Whisper on the 12 GB GPU
+    # once bge-m3 runs on the CPU (memory.embedding_device: cpu).
+    # Memory extraction and summaries use this same backend, so only one
+    # chat model is ever loaded.
     ollama:
+      adapter: litellm
+      provider: ollama
+      model: ollama_chat/qwen3:14b
+      api_base: "http://127.0.0.1:11434"
+      api_key_env: null
+      temperature: 0.6
+      request_timeout_s: 180
+      keep_alive: 60m
+      fallback_backend: ollama-8b
+    # Fallback when 14b cannot load or errors; also selectable in the dashboard.
+    ollama-8b:
       adapter: litellm
       provider: ollama
       model: ollama_chat/qwen3:8b
@@ -17,6 +32,7 @@ llm:
       api_key_env: null
       temperature: 0.6
       request_timeout_s: 180
+      keep_alive: 10m
 
 voice:
   stt:

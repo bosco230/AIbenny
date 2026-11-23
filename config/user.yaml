@@ -22,6 +22,8 @@ memory:
   # Phase 2: semantic recall, conversation summaries, event follow-ups.
   embedding_model: bge-m3
   embedding_endpoint: http://127.0.0.1:11434
+  # Phase 3: keep bge-m3 on the CPU so qwen3:14b and Whisper fit on the GPU.
+  embedding_device: cpu
   semantic_deadline_ms: 800
   semantic_threshold: 0.5
   summaries: true

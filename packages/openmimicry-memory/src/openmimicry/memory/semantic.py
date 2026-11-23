@@ -111,12 +111,14 @@ class OllamaEmbedder:
         model: str = "bge-m3",
         base_url: str = "http://127.0.0.1:11434",
         timeout_s: float = 60.0,
-        keep_alive: str = "30m",
+        keep_alive: str = "60m",
+        cpu_only: bool = False,
     ) -> None:
         self.model = model
         self._url = base_url.rstrip("/") + "/api/embed"
         self._timeout_s = timeout_s
         self._keep_alive = keep_alive
+        self._options = {"num_gpu": 0} if cpu_only else {}
         self._client: Any = None
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -128,7 +130,12 @@ class OllamaEmbedder:
             self._client = httpx.AsyncClient(timeout=self._timeout_s)
         response = await self._client.post(
             self._url,
-            json={"model": self.model, "input": list(texts), "keep_alive": self._keep_alive},
+            json={
+                "model": self.model,
+                "input": list(texts),
+                "keep_alive": self._keep_alive,
+                **({"options": self._options} if self._options else {}),
+            },
         )
         response.raise_for_status()
         vectors = response.json().get("embeddings")
