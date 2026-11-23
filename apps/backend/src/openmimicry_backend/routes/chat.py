@@ -22,9 +22,11 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+import yaml
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from openmimicry.core import (
@@ -58,6 +60,26 @@ _MIN_THINKING_SECONDS = 0.65
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+_SHARED_RULES_PATH = Path(__file__).resolve().parents[5] / "config" / "shared_rules.yml"
+
+
+def load_shared_rules(path: Path | None = None) -> str | None:
+    """Rules every companion follows (e.g. Bible quoting), from shared_rules.yml.
+
+    Read on every turn, like the personality files, so edits apply to both
+    Benny and 叮當 on the next message without a restart.
+    """
+
+    try:
+        data = yaml.safe_load((path or _SHARED_RULES_PATH).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    parts = [str(value).strip() for value in data.values() if isinstance(value, str) and value.strip()]
+    return "\n\n".join(parts) or None
 
 
 class ChatRequest(BaseModel):
@@ -221,8 +243,10 @@ async def _run_llm_path(
     )
     utterance_id = uuid4().hex if speech_candidate else None
 
+    shared_rules = load_shared_rules()
     messages = [
         LLMMessage(role="system", content=settings.system_prompt),
+        *([LLMMessage(role="system", content=shared_rules)] if shared_rules else []),
         *history,
         LLMMessage(role="user", content=text),
     ]
