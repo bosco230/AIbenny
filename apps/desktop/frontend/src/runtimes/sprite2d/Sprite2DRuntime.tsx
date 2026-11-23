@@ -55,8 +55,8 @@ type Expression = "neutral" | "happy" | "sad" | "angry" | "surprised";
 /** Map the LLM's emotion vocabulary onto the photo folders that exist. */
 export function expressionForEmotion(emotion: unknown): Expression {
   switch (emotion) {
-    case "happy":
-      return "happy";
+    // The happy/ and happy_speaking/ smile photos look unnatural, so happy
+    // replies keep Benny's original face (idle blink + speaking frames).
     case "sad":
     case "worried":
       return "sad";
