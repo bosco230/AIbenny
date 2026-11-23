@@ -6,7 +6,8 @@ faces/smile_blink.svg.
 
 Expressions: neutral, smile, happy, sad, angry, surprised, worried, thinking.
 
-Design: big head, short body; dark-brown spiky fringe; large eyes with two
+Design: big head, short body; yellow baseball cap over a dark-brown spiky
+fringe; large eyes with two
 highlights; blue zip-less hoodie with kangaroo pocket and drawstrings, a
 little gold bell on the right drawstring (the "叮"); jeans and white
 sneakers. Deliberately original.
@@ -39,6 +40,15 @@ DEFS = """
   <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#5A3E30"/>
     <stop offset="1" stop-color="#2E1F18"/>
+  </linearGradient>
+  <radialGradient id="cap" cx="0.4" cy="0.3" r="0.8">
+    <stop offset="0" stop-color="#FFE98A"/>
+    <stop offset="0.6" stop-color="#FFD23F"/>
+    <stop offset="1" stop-color="#F0B215"/>
+  </radialGradient>
+  <linearGradient id="brim" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#FFD84D"/>
+    <stop offset="1" stop-color="#E3A40E"/>
   </linearGradient>
   <linearGradient id="hoodie" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#6A93D0"/>
@@ -110,8 +120,16 @@ HEAD = """
   <path d="M80 196 Q66 92 160 62 Q240 40 302 78 Q342 104 328 194 L314 160 Q302 152 298 132
            L276 156 Q262 140 258 118 L236 150 Q220 126 214 106 L196 146 Q178 126 172 106
            L152 148 Q134 132 128 112 L108 158 Q96 152 92 138 Z" fill="url(#hair)"/>
-  <path d="M132 84 Q170 66 214 68" fill="none" stroke="#8A6650" stroke-width="7" stroke-linecap="round" opacity="0.7"/>
-  <path d="M188 70 Q196 58 206 50" fill="none" stroke="url(#hair)" stroke-width="10" stroke-linecap="round"/>
+  <!-- yellow baseball cap (front view): crown, seams, button, brim -->
+  <g filter="url(#shadow)">
+    <path d="M78 138 Q70 46 200 34 Q330 46 322 138 Q200 118 78 138 Z" fill="url(#cap)" stroke="#C98A0A" stroke-width="3"/>
+    <path d="M200 38 Q160 70 148 128 M200 38 Q240 70 252 128" fill="none" stroke="#DFA20F" stroke-width="2.5"/>
+    <path d="M112 84 Q150 50 204 46" fill="none" stroke="#FFF6C8" stroke-width="9" stroke-linecap="round" opacity="0.7"/>
+    <circle cx="200" cy="36" r="8" fill="#F2B51C" stroke="#C98A0A" stroke-width="2.5"/>
+    <circle cx="200" cy="96" r="15" fill="#FFFFFF" opacity="0.92"/>
+    <path d="M192 103 Q192 89 200 89 Q208 89 208 103 L210 106 Q200 108 190 106 Z" fill="url(#gold)" stroke="#9C6A10" stroke-width="1.2"/>
+    <path d="M84 132 Q200 112 316 132 Q332 146 314 156 Q200 136 86 156 Q68 146 84 132 Z" fill="url(#brim)" stroke="#C98A0A" stroke-width="3"/>
+  </g>
   <!-- nose -->
   <path d="M198 232 Q201 236 204 232" fill="none" stroke="#D89A78" stroke-width="3" stroke-linecap="round"/>"""
 
@@ -225,7 +243,7 @@ def extras(expression: str) -> str:
         parts.append(f'<path d="M152 232 Q146 246 152 252 Q160 256 163 248 Q163 240 152 232 Z" fill="{TEAR}" stroke="#5FAAD8" stroke-width="1.5"/>')
     if expression == "angry":
         mark = "M-10 -4 Q0 -2 4 -10 M10 4 Q0 2 -4 10 M-4 -10 Q-2 0 -10 4 M4 10 Q2 0 10 -4"
-        parts.append(f'<path d="{mark}" fill="none" stroke="#E8434B" stroke-width="4.5" stroke-linecap="round" transform="translate(300 92) scale(1.5)"/>')
+        parts.append(f'<path d="{mark}" fill="none" stroke="#E8434B" stroke-width="4.5" stroke-linecap="round" transform="translate(338 128) scale(1.4)"/>')
     if expression == "worried":
         parts.append('<path d="M300 150 Q290 168 298 176 Q308 180 312 170 Q312 160 300 150 Z" fill="#CDEBFF" stroke="#5FAAD8" stroke-width="1.5"/>')
     if expression == "thinking":
