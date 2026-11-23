@@ -147,6 +147,18 @@ function addMessage(kind, text, who) {
 
 function setStatus(text) { $("status").textContent = text; }
 
+/* One reused <audio>: iPhone Safari only lets an element play later if it
+   was first started from a tap, so the first tap "unlocks" it. */
+const player = new Audio();
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  player.src = SILENCE;
+  player.play().then(() => player.pause()).catch(() => { audioUnlocked = false; });
+}
+
 let currentAudio = null;
 async function speak(text) {
   if (!$("voice").checked || !state.voiceAvailable) {
@@ -156,7 +168,8 @@ async function speak(text) {
   }
   try {
     const voice = await postJSON("/api/speak", { text, character: state.character });
-    const audio = new Audio(voice.audio);
+    const audio = player;
+    audio.src = voice.audio;
     currentAudio = audio;
     await new Promise((resolve) => {
       audio.addEventListener("ended", resolve, { once: true });
@@ -325,6 +338,9 @@ async function showApp() {
 }
 
 function bind() {
+  for (const type of ["pointerdown", "keydown", "touchend"]) {
+    window.addEventListener(type, unlockAudio, { passive: true });
+  }
   Avatar.img = $("avatar");
   Avatar.preload();
   Avatar.startBlinking();
